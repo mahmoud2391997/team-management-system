@@ -14,7 +14,7 @@ export function useEmployees(options: UseEmployeesOptions = {}) {
   const { autoFetch = true, refetchInterval = 0 } = options
 
   const [employees, setEmployees] = useState<Employee[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(autoFetch)
   const [error, setError] = useState<string | null>(null)
 
   const fetch = useCallback(async () => {

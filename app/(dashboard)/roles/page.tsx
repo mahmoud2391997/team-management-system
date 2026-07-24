@@ -44,8 +44,8 @@ export default function RolesPage() {
     if (profile) {
       setCurrentUser({ id: profile.user_id, role: profile.role })
       if (profile.team_id) {
-        const data = await getProfiles()
-        setProfiles(data)
+        const { data: profilesData } = await getProfiles()
+        setProfiles(profilesData || [])
         const rolesResult = await getTeamRoles()
         if (rolesResult.success) setRoles(rolesResult.data || [])
       }

@@ -1,6 +1,8 @@
+import { Suspense } from 'react'
 import { getTasks, getDepartments } from '@/lib/actions/data-actions'
 import { Button } from '@/components/ui/button'
 import TasksContainer from '@/components/dashboard/tasks-container'
+import { KanbanSkeleton } from '@/components/ui/skeleton'
 import { isError } from '@/lib/utils/async-helpers'
 
 export const metadata = {
@@ -8,8 +10,7 @@ export const metadata = {
   description: 'Manage and track team tasks',
 }
 
-export default async function TasksPage() {
-  // Fetch data on the server
+async function TasksContent() {
   const [tasksResult, departmentsResult] = await Promise.all([
     getTasks(),
     getDepartments(),
@@ -18,6 +19,15 @@ export default async function TasksPage() {
   const tasks = isError(tasksResult) ? [] : tasksResult.data
   const departments = isError(departmentsResult) ? [] : departmentsResult.data
 
+  return (
+    <TasksContainer
+      initialTasks={tasks}
+      initialDepartments={departments}
+    />
+  )
+}
+
+export default function TasksPage() {
   return (
     <div className="p-8 space-y-8">
       <div className="flex justify-between items-center">
@@ -28,10 +38,9 @@ export default async function TasksPage() {
         <Button>+ Add Task</Button>
       </div>
 
-      <TasksContainer
-        initialTasks={tasks}
-        initialDepartments={departments}
-      />
+      <Suspense fallback={<KanbanSkeleton />}>
+        <TasksContent />
+      </Suspense>
     </div>
   )
 }

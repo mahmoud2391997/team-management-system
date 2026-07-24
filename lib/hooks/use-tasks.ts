@@ -15,7 +15,7 @@ export function useTasks(options: UseTasksOptions = {}) {
   const { autoFetch = true, refetchInterval = 0, filterDept } = options
 
   const [tasks, setTasks] = useState<Task[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(autoFetch)
   const [error, setError] = useState<string | null>(null)
 
   const fetch = useCallback(async () => {

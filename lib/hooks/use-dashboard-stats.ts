@@ -14,7 +14,7 @@ export function useDashboardStats(options: UseDashboardStatsOptions = {}) {
   const { autoFetch = true, refetchInterval = 30000 } = options // Auto-refetch every 30s by default
 
   const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(autoFetch)
   const [error, setError] = useState<string | null>(null)
 
   const fetch = useCallback(async () => {

@@ -1,10 +1,8 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { useEmployees, useDepartments } from '@/lib/hooks'
-import { Button } from '@/components/ui/button'
+import { useState, useMemo, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
-import { EmployeeListSkeleton } from '@/components/ui/skeleton'
 import EmployeeForm from '@/components/dashboard/employee-form'
 import EmployeeList from '@/components/dashboard/employee-list'
 import type { Employee, Department } from '@/lib/types'
@@ -18,13 +16,14 @@ export default function EmployeesContainer({
   initialEmployees,
   initialDepartments,
 }: EmployeesContainerProps) {
-  const { employees = initialEmployees, loading, refetch } = useEmployees({ autoFetch: false })
-  const { departments = initialDepartments } = useDepartments({ autoFetch: false })
-  
+  const [employees, setEmployees] = useState(initialEmployees)
+  const [departments] = useState(initialDepartments)
   const [showForm, setShowForm] = useState(false)
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterDept, setFilterDept] = useState('')
+  const [isPending, startTransition] = useTransition()
+  const router = useRouter()
 
   const filteredEmployees = useMemo(() => {
     return employees.filter((emp) => {
@@ -34,9 +33,7 @@ export default function EmployeesContainer({
         emp.profile?.first_name?.toLowerCase().includes(searchLower) ||
         emp.profile?.last_name?.toLowerCase().includes(searchLower) ||
         emp.profile?.email?.toLowerCase().includes(searchLower)
-
       const matchesDept = !filterDept || emp.department_id === filterDept
-
       return matchesSearch && matchesDept
     })
   }, [employees, searchTerm, filterDept])
@@ -49,11 +46,11 @@ export default function EmployeesContainer({
   const handleCloseForm = async () => {
     setShowForm(false)
     setEditingEmployee(null)
-    await refetch()
+    startTransition(() => router.refresh())
   }
 
   const handleDelete = async () => {
-    await refetch()
+    startTransition(() => router.refresh())
   }
 
   return (
@@ -88,9 +85,7 @@ export default function EmployeesContainer({
         </select>
       </div>
 
-      {loading ? (
-        <EmployeeListSkeleton />
-      ) : filteredEmployees.length === 0 ? (
+      {filteredEmployees.length === 0 ? (
         <Card className="p-12 text-center border border-border bg-card">
           <p className="text-muted-foreground">
             {searchTerm || filterDept
@@ -99,11 +94,13 @@ export default function EmployeesContainer({
           </p>
         </Card>
       ) : (
-        <EmployeeList
-          employees={filteredEmployees}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-        />
+        <div className={isPending ? 'opacity-60 pointer-events-none' : ''}>
+          <EmployeeList
+            employees={filteredEmployees}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+          />
+        </div>
       )}
     </div>
   )

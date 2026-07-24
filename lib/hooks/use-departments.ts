@@ -14,7 +14,7 @@ export function useDepartments(options: UseDepartmentsOptions = {}) {
   const { autoFetch = true, refetchInterval = 0 } = options
 
   const [departments, setDepartments] = useState<Department[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(autoFetch)
   const [error, setError] = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
