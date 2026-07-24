@@ -1,8 +1,10 @@
 import { getDashboardStats } from '@/lib/actions/data-actions'
 import { Card } from '@/components/ui/card'
+import { isError } from '@/lib/utils/async-helpers'
 
 export default async function DashboardPage() {
-  const stats = await getDashboardStats()
+  const result = await getDashboardStats()
+  const stats = isError(result) ? { employees: 0, tasks: 0, departments: 0, completedTasks: 0 } : result.data
 
   const completionRate =
     stats.tasks > 0 ? Math.round((stats.completedTasks / stats.tasks) * 100) : 0

@@ -4,13 +4,15 @@ import { useEffect, useState } from 'react'
 import { getDepartments, getManagerProfiles, createDepartment, updateDepartment, deleteDepartment } from '@/lib/actions/data-actions'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { isError } from '@/lib/utils/async-helpers'
+import type { Department } from '@/lib/types'
 
 export default function DepartmentsPage() {
-  const [departments, setDepartments] = useState<any[]>([])
+  const [departments, setDepartments] = useState<Department[]>([])
   const [profiles, setProfiles] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [editingDept, setEditingDept] = useState<any>(null)
+  const [editingDept, setEditingDept] = useState<Department | null>(null)
   const [formData, setFormData] = useState({ name: '', manager_id: '', icon: '🏢' })
 
   useEffect(() => {
@@ -20,14 +22,14 @@ export default function DepartmentsPage() {
 
   const fetchDepartments = async () => {
     setLoading(true)
-    const data = await getDepartments()
-    setDepartments(data)
+    const result = await getDepartments()
+    setDepartments(isError(result) ? [] : result.data)
     setLoading(false)
   }
 
   const fetchProfiles = async () => {
-    const data = await getManagerProfiles()
-    setProfiles(data)
+    const result = await getManagerProfiles()
+    setProfiles(isError(result) ? [] : result.data as any[])
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -53,9 +55,9 @@ export default function DepartmentsPage() {
     fetchDepartments()
   }
 
-  const handleEdit = (dept: any) => {
+  const handleEdit = (dept: Department) => {
     setEditingDept(dept)
-    setFormData({ name: dept.name, manager_id: dept.manager_id, icon: dept.icon || '🏢' })
+    setFormData({ name: dept.name, manager_id: dept.manager_id || '', icon: dept.description || '🏢' })
     setShowForm(true)
   }
 
