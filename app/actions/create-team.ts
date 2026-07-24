@@ -30,17 +30,11 @@ export async function createTeamWithAccount(teamName: string, email: string, pas
       .select('id')
       .single()
 
-    if (userError || !newUser) return { error: 'Failed to create account' }
+    if (userError || !newUser) {
+      console.error('User insert error:', JSON.stringify(userError))
+      return { error: 'Failed to create account: ' + (userError?.message || 'unknown') }
+    }
     userId = newUser.id
-
-    await supabase.from('profiles').insert({
-      id: userId,
-      email: email.toLowerCase().trim(),
-      first_name: null,
-      last_name: null,
-      role: 'ADMIN',
-      team_id: null,
-    })
   }
 
   const { data: teamResult, error: teamError } = await supabase
@@ -57,17 +51,24 @@ export async function createTeamWithAccount(teamName: string, email: string, pas
 
   const { error: profileErr } = await supabase
     .from('profiles')
-    .update({ team_id: teamId, role: 'ADMIN', updated_at: new Date().toISOString() })
-    .eq('id', userId)
-  if (profileErr) console.error('Profile update error:', JSON.stringify(profileErr))
+    .upsert({
+      id: userId,
+      email: email.toLowerCase().trim(),
+      first_name: null,
+      last_name: null,
+      role: 'ADMIN',
+      team_id: teamId,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' })
+  if (profileErr) console.error('Profile upsert error:', JSON.stringify(profileErr))
 
-  const { error: tmErr } = await supabase.from('team_members').insert({
+  const { error: tmErr } = await supabase.from('team_members').upsert({
     user_id: userId,
     team_id: teamId,
     role: 'ADMIN',
     is_active: true,
-  })
-  if (tmErr) console.error('team_members insert error:', JSON.stringify(tmErr))
+  }, { onConflict: 'user_id,team_id' })
+  if (tmErr) console.error('team_members upsert error:', JSON.stringify(tmErr))
 
   const existingSession = await getSessionFromCookies()
   if (!existingSession || existingSession.userId !== userId) {
@@ -83,8 +84,6 @@ export async function createTeamForUser(teamName: string) {
   const session = await getSessionFromCookies()
   if (!session) return { error: 'Not authenticated' }
 
-  console.log('createTeamForUser session:', JSON.stringify(session))
-
   const supabase = getSupabase()
 
   const { data: teamResult, error: teamError } = await supabase
@@ -94,24 +93,22 @@ export async function createTeamForUser(teamName: string) {
     .single()
 
   if (teamError || !teamResult) {
-    console.error('createTeamForUser - Team insert error:', JSON.stringify(teamError))
     return { error: teamError?.message || 'Failed to create team' }
   }
   const teamId = teamResult.id
 
-  const { error: profileErr } = await supabase
-    .from('profiles')
-    .update({ team_id: teamId, role: 'ADMIN', updated_at: new Date().toISOString() })
-    .eq('id', session.userId)
-  if (profileErr) console.error('createTeamForUser - Profile update error:', JSON.stringify(profileErr))
+  const { data: profile } = await supabase.from('profiles').select('email').eq('id', session.userId).single()
 
-  const { error: tmErr } = await supabase.from('team_members').insert({
+  await supabase
+    .from('profiles')
+    .upsert({ id: session.userId, email: profile?.email || '', team_id: teamId, role: 'ADMIN', updated_at: new Date().toISOString() }, { onConflict: 'id' })
+
+  await supabase.from('team_members').upsert({
     user_id: session.userId,
     team_id: teamId,
     role: 'ADMIN',
     is_active: true,
-  })
-  if (tmErr) console.error('createTeamForUser - team_members insert error:', JSON.stringify(tmErr))
+  }, { onConflict: 'user_id,team_id' })
 
   return { success: true }
 }

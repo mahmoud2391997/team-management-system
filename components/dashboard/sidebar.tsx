@@ -75,11 +75,12 @@ export function Sidebar({ userRole }: { userRole?: string }) {
       if (cancelled) return
       const list = teamsResult.data || []
       const active = list.find((t: any) => t.id === teamsResult.activeTeamId)
+      const hasTeam = (teamsResult.success === true) && list.length > 0
       setTeamData({
         teams: list,
         activeId: teamsResult.activeTeamId,
         activeName: active?.name || '',
-        hasTeam: teamsResult.success && list.length > 0,
+        hasTeam,
       })
       if (notifResult.success) {
         setUnreadCount(notifResult.data?.filter((n: any) => !n.read).length || 0)
@@ -106,8 +107,7 @@ export function Sidebar({ userRole }: { userRole?: string }) {
 
   const sections = useMemo(() => {
     if (!teamData.hasTeam) return noTeamSections
-    if (permsLoading) return menuSections.map(s => ({ ...s, items: s.items.filter(i => !i.permission) }))
-    if (permissions.length === 0) return noTeamSections
+    if (permsLoading || permissions.length === 0) return menuSections.map(s => ({ ...s, items: s.items.filter(i => !i.permission) }))
     return menuSections.map(section => ({
       ...section,
       items: section.items.filter(item => !item.permission || permissions.includes(item.permission as any)),

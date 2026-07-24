@@ -38,8 +38,8 @@ export default function NotificationsPage() {
         setError(result.error)
         setActionId(null)
       } else {
-        router.push('/dashboard')
-        router.refresh()
+       // Force a full page reload to refresh sidebar with new team data
+        window.location.reload()
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to accept invitation')

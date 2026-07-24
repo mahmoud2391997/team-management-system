@@ -408,21 +408,10 @@ export async function getUserTeams() {
 
   const { data: memberTeams } = await supabase
     .from('team_members')
-    .select('team_id')
+    .select('team_id, role')
     .eq('user_id', session.userId)
 
   const teamIds = [...new Set((memberTeams || []).map(m => m.team_id))]
-
-  if (activeTeamId && !teamIds.includes(activeTeamId)) {
-    teamIds.push(activeTeamId)
-
-    await supabase.from('team_members').insert({
-      user_id: session.userId,
-      team_id: activeTeamId,
-      role: profile?.role || 'EMPLOYEE',
-      is_active: true,
-    }).then(() => {}).catch(() => {})
-  }
 
   if (teamIds.length === 0) return { success: true, data: [], activeTeamId: null }
 
@@ -432,6 +421,31 @@ export async function getUserTeams() {
     .in('id', teamIds)
 
   const result = (teams || []).map(t => ({ id: t.id, name: t.name }))
+
+  // If profile has no team_id but user has team memberships, set the first one as active
+  if (!activeTeamId && teamIds.length > 0) {
+    const firstTeamId = teamIds[0]
+    const firstTeamRole = memberTeams?.find(m => m.team_id === firstTeamId)?.role || 'EMPLOYEE'
+    
+    // Update profile to set the active team
+    await supabase
+      .from('profiles')
+      .update({ team_id: firstTeamId, role: firstTeamRole, updated_at: new Date().toISOString() })
+      .eq('id', session.userId)
+    
+    return { success: true, data: result, activeTeamId: firstTeamId }
+  }
+
+  if (activeTeamId && !teamIds.includes(activeTeamId)) {
+    teamIds.push(activeTeamId)
+
+    await supabase.from('team_members').insert({
+      user_id: session.userId,
+      team_id: activeTeamId,
+      role: profile?.role || 'EMPLOYEE',
+      is_active: true,
+    })
+  }
 
   if (activeTeamId && !result.find(t => t.id === activeTeamId) && result.length > 0) {
     const fallback = result[0]

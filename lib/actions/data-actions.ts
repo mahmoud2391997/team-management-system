@@ -234,7 +234,7 @@ export async function getDepartments(): Promise<ActionResult<Department[]>> {
 
     const enriched = await Promise.all(departments.map(async (dept) => {
       const { data: manager } = dept.manager_id
-        ? await supabase.from('profiles').select('id, first_name, last_name').eq('id', dept.manager_id).single()
+        ? await supabase.from('profiles').select('id, email, first_name, last_name').eq('id', dept.manager_id).single()
         : { data: null }
 
       return { ...dept, manager: manager || null }
@@ -303,12 +303,25 @@ export async function getProfiles(): Promise<ActionResult<Record<string, any>[]>
       .eq('id', session.userId)
       .single()
 
-    if (!profile?.team_id) return createSuccess([])
+    let teamId = profile?.team_id
+
+    if (!teamId) {
+      const { data: membership } = await supabase
+        .from('team_members')
+        .select('team_id')
+        .eq('user_id', session.userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      teamId = membership?.team_id
+    }
+
+    if (!teamId) return createSuccess([])
 
     const { data: profiles } = await supabase
       .from('profiles')
       .select('*')
-      .eq('team_id', profile.team_id)
+      .eq('team_id', teamId)
       .order('created_at', { ascending: false })
 
     return createSuccess((profiles || []).map(p => ({ ...p, id: p.id })))
