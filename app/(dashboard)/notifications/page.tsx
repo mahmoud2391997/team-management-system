@@ -29,6 +29,41 @@ export default function NotificationsPage() {
     setLoading(false)
   }
 
+  const handleAccept = async (notificationId: string) => {
+    setActionId(notificationId)
+    setError(null)
+    try {
+      const result = await acceptTeamInvitation(notificationId)
+      if (result?.error) {
+        setError(result.error)
+        setActionId(null)
+      } else {
+        window.location.href = '/dashboard'
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to accept invitation')
+      setActionId(null)
+    }
+  }
+
+  const handleDecline = async (notificationId: string) => {
+    setActionId(notificationId)
+    setError(null)
+    try {
+      const result = await declineTeamInvitation(notificationId)
+      if (result?.error) {
+        setError(result.error)
+        setActionId(null)
+      } else {
+        setNotifications(prev => prev.filter(n => n.id !== notificationId))
+        setActionId(null)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to decline invitation')
+      setActionId(null)
+    }
+  }
+
   const unreadCount = notifications.filter(n => !n.read).length
 
   if (loading) {
@@ -84,47 +119,22 @@ export default function NotificationsPage() {
                 </div>
                 {notif.type === 'team_invitation' && (
                   <div className="flex gap-2 mt-3">
-                    <form action={async () => {
-                      setActionId(notif.id)
-                      setError(null)
-                      const result = await acceptTeamInvitation(notif.id)
-                      if (result?.error) {
-                        setError(result.error)
-                        setActionId(null)
-                      } else {
-                        window.location.href = '/dashboard'
-                      }
-                    }}>
-                      <Button
-                        size="sm"
-                        type="submit"
-                        disabled={actionId === notif.id}
-                      >
-                        <Check className="h-4 w-4 mr-1" />
-                        {actionId === notif.id ? 'Accepting...' : 'Accept'}
-                      </Button>
-                    </form>
-                    <form action={async () => {
-                      setActionId(notif.id)
-                      setError(null)
-                      const result = await declineTeamInvitation(notif.id)
-                      if (result?.error) {
-                        setError(result.error)
-                        setActionId(null)
-                      } else {
-                        setNotifications(prev => prev.filter(n => n.id !== notif.id))
-                        setActionId(null)
-                      }
-                    }}>
-                      <Button
-                        size="sm"
-                        type="submit"
-                        variant="outline"
-                        disabled={actionId === notif.id}
-                      >
-                        {actionId === notif.id ? 'Declining...' : 'Decline'}
-                      </Button>
-                    </form>
+                    <Button
+                      size="sm"
+                      onClick={() => handleAccept(notif.id)}
+                      disabled={actionId === notif.id}
+                    >
+                      <Check className="h-4 w-4 mr-1" />
+                      {actionId === notif.id ? 'Accepting...' : 'Accept'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDecline(notif.id)}
+                      disabled={actionId === notif.id}
+                    >
+                      {actionId === notif.id ? 'Declining...' : 'Decline'}
+                    </Button>
                   </div>
                 )}
               </CardContent>
