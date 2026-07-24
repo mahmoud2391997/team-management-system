@@ -29,7 +29,7 @@ export default function DashboardNav() {
 
   const handleLogout = async () => {
     await logout()
-    window.location.href = '/auth/login'
+    window.location.href = '/'
   }
 
   return (

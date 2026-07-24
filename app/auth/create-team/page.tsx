@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import Link from 'next/link'
+import AuthNavbar from '@/components/auth-navbar'
 
 export default function CreateTeamPage() {
   const [teamName, setTeamName] = useState('')
@@ -39,8 +40,10 @@ export default function CreateTeamPage() {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <Card className="w-full max-w-md">
+    <div className="flex h-svh w-full flex-col overflow-hidden">
+      <AuthNavbar />
+      <div className="flex flex-1 items-center justify-center p-6">
+        <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="text-2xl">Create Your Team</CardTitle>
           <CardDescription>
@@ -106,6 +109,7 @@ export default function CreateTeamPage() {
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   )
 }

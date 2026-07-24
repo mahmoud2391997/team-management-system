@@ -1,9 +1,7 @@
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import { cookies } from 'next/headers'
-import { connectToDatabase } from '@/lib/mongodb'
-import { ObjectId } from 'mongodb'
-import { Document, WithId } from 'mongodb'
+import { getSupabase } from '@/lib/supabase'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'team-management-secret-key-change-in-production'
 const COOKIE_NAME = 'auth-token'
@@ -13,16 +11,15 @@ export interface JWTPayload {
   email: string
 }
 
-export interface UserProfile extends Document {
-  _id: ObjectId
-  user_id: string
+export interface UserProfile {
+  id: string
   email: string
   first_name: string | null
   last_name: string | null
   role: string
   team_id: string | null
-  created_at: Date
-  updated_at: Date
+  created_at: string
+  updated_at: string
 }
 
 export interface CurrentUser {
@@ -59,7 +56,7 @@ export async function setSessionCookie(payload: JWTPayload) {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+    maxAge: 60 * 60 * 24 * 7,
   })
 }
 
@@ -79,19 +76,26 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   const session = await getSessionFromCookies()
   if (!session) return null
 
-  const { db } = await connectToDatabase()
-  const user = await db.collection('users').findOne({ _id: new ObjectId(session.userId) })
+  const supabase = getSupabase()
+
+  const { data: user } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', session.userId)
+    .single()
+
   if (!user) return null
 
-  const profile = await db.collection('profiles').findOne({ user_id: session.userId }) as UserProfile | null
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', session.userId)
+    .single()
 
   return {
-    id: user._id.toString(),
+    id: user.id,
     email: user.email,
-    profile: profile ? {
-      ...profile,
-      _id: profile._id,
-    } : null,
+    profile: profile || null,
   }
 }
 
@@ -99,9 +103,15 @@ export async function getProfile(): Promise<UserProfile | null> {
   const session = await getSessionFromCookies()
   if (!session) return null
 
-  const { db } = await connectToDatabase()
-  const profile = await db.collection('profiles').findOne({ user_id: session.userId }) as UserProfile | null
-  return profile
+  const supabase = getSupabase()
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', session.userId)
+    .single()
+
+  return profile || null
 }
 
 export async function getRequiredUser() {

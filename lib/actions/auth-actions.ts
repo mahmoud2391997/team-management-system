@@ -1,13 +1,17 @@
 'use server'
 
-import { connectToDatabase } from '@/lib/mongodb'
+import { getSupabase } from '@/lib/supabase'
 import { hashPassword, setSessionCookie, removeSessionCookie, getSessionFromCookies } from '@/lib/auth'
-import { ObjectId } from 'mongodb'
 
 export async function login(email: string, password: string) {
-  const { db } = await connectToDatabase()
+  const supabase = getSupabase()
 
-  const user = await db.collection('users').findOne({ email: email.toLowerCase().trim() })
+  const { data: user } = await supabase
+    .from('users')
+    .select('*')
+    .eq('email', email.toLowerCase().trim())
+    .single()
+
   if (!user) {
     return { error: 'Invalid email or password' }
   }
@@ -18,47 +22,49 @@ export async function login(email: string, password: string) {
     return { error: 'Invalid email or password' }
   }
 
-  await setSessionCookie({
-    userId: user._id.toString(),
-    email: user.email,
-  })
+  await setSessionCookie({ userId: user.id, email: user.email })
 
   return { success: true }
 }
 
 export async function signUp(email: string, password: string, firstName?: string, lastName?: string) {
-  const { db } = await connectToDatabase()
+  const supabase = getSupabase()
 
-  const existing = await db.collection('users').findOne({ email: email.toLowerCase().trim() })
+  const { data: existing } = await supabase
+    .from('users')
+    .select('id')
+    .eq('email', email.toLowerCase().trim())
+    .single()
+
   if (existing) {
     return { error: 'An account with this email already exists' }
   }
 
   const passwordHash = await hashPassword(password)
 
-  const result = await db.collection('users').insertOne({
-    email: email.toLowerCase().trim(),
-    password_hash: passwordHash,
-    created_at: new Date(),
-  })
+  const { data: newUser, error: insertError } = await supabase
+    .from('users')
+    .insert({ email: email.toLowerCase().trim(), password_hash: passwordHash })
+    .select()
+    .single()
 
-  await db.collection('profiles').insertOne({
-    user_id: result.insertedId.toString(),
+  if (insertError || !newUser) {
+    return { error: 'Failed to create account' }
+  }
+
+  await supabase.from('profiles').insert({
+    id: newUser.id,
+    user_id: newUser.id,
     email: email.toLowerCase().trim(),
     first_name: firstName || null,
     last_name: lastName || null,
     role: 'EMPLOYEE',
     team_id: null,
-    created_at: new Date(),
-    updated_at: new Date(),
   })
 
-  await setSessionCookie({
-    userId: result.insertedId.toString(),
-    email: email.toLowerCase().trim(),
-  })
+  await setSessionCookie({ userId: newUser.id, email: email.toLowerCase().trim() })
 
-  return { success: true, userId: result.insertedId.toString() }
+  return { success: true, userId: newUser.id }
 }
 
 export async function logout() {
@@ -70,14 +76,24 @@ export async function getUserInfo() {
   const session = await getSessionFromCookies()
   if (!session) return null
 
-  const { db } = await connectToDatabase()
-  const user = await db.collection('users').findOne({ _id: new ObjectId(session.userId) })
+  const supabase = getSupabase()
+
+  const { data: user } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', session.userId)
+    .single()
+
   if (!user) return null
 
-  const profile = await db.collection('profiles').findOne({ user_id: session.userId })
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', session.userId)
+    .single()
 
   return {
-    id: user._id.toString(),
+    id: user.id,
     email: user.email,
     first_name: profile?.first_name || null,
     last_name: profile?.last_name || null,
@@ -93,8 +109,14 @@ export async function resetPassword(currentPassword: string, newPassword: string
 
   if (newPassword.length < 6) return { error: 'New password must be at least 6 characters' }
 
-  const { db } = await connectToDatabase()
-  const user = await db.collection('users').findOne({ _id: new ObjectId(session.userId) })
+  const supabase = getSupabase()
+
+  const { data: user } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', session.userId)
+    .single()
+
   if (!user) return { error: 'User not found' }
 
   const bcrypt = await import('bcryptjs')
@@ -102,10 +124,10 @@ export async function resetPassword(currentPassword: string, newPassword: string
   if (!valid) return { error: 'Current password is incorrect' }
 
   const newHash = await hashPassword(newPassword)
-  await db.collection('users').updateOne(
-    { _id: new ObjectId(session.userId) },
-    { $set: { password_hash: newHash } }
-  )
+  await supabase
+    .from('users')
+    .update({ password_hash: newHash })
+    .eq('id', session.userId)
 
   return { success: true }
 }

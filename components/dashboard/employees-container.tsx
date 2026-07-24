@@ -3,6 +3,7 @@
 import { useState, useMemo, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import EmployeeForm from '@/components/dashboard/employee-form'
 import EmployeeList from '@/components/dashboard/employee-list'
 import type { Employee, Department } from '@/lib/types'
@@ -63,7 +64,7 @@ export default function EmployeesContainer({
         />
       )}
 
-      <div className="flex gap-4">
+      <div className="flex gap-4 items-center justify-between">
         <input
           type="text"
           placeholder="Search by name or email..."
@@ -83,6 +84,7 @@ export default function EmployeesContainer({
             </option>
           ))}
         </select>
+        <Button onClick={() => { setEditingEmployee(null); setShowForm(true) }}>+ Add Employee</Button>
       </div>
 
       {filteredEmployees.length === 0 ? (

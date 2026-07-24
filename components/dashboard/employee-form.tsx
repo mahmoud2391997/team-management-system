@@ -15,6 +15,7 @@ export default function EmployeeForm({
   onClose: () => void
 }) {
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [profiles, setProfiles] = useState<any[]>([])
   const [formData, setFormData] = useState({
     profile_id: employee?.profile_id || '',
@@ -31,17 +32,19 @@ export default function EmployeeForm({
   }, [])
 
   const fetchProfiles = async () => {
-    const data = await getProfiles()
-    setProfiles(data)
+    const result = await getProfiles()
+    setProfiles(result.data ?? [])
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    setError(null)
 
     try {
+      let result
       if (employee) {
-        await updateEmployee(employee.id || employee._id, {
+        result = await updateEmployee(employee.id || employee._id, {
           department_id: formData.department_id,
           position: formData.position,
           join_date: formData.join_date ? new Date(formData.join_date) : null,
@@ -50,7 +53,7 @@ export default function EmployeeForm({
           manager_id: formData.manager_id || null,
         })
       } else {
-        await createEmployee({
+        result = await createEmployee({
           profile_id: formData.profile_id,
           department_id: formData.department_id,
           position: formData.position,
@@ -61,9 +64,14 @@ export default function EmployeeForm({
         })
       }
 
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+
       onClose()
     } catch (error) {
-      console.error('Error saving employee:', error)
+      setError(error instanceof Error ? error.message : 'Failed to save employee')
     } finally {
       setLoading(false)
     }
@@ -171,6 +179,8 @@ export default function EmployeeForm({
             ))}
           </select>
         </div>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
         <div className="flex gap-4 pt-6">
           <Button type="submit" disabled={loading} className="flex-1">

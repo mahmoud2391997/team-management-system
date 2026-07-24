@@ -1,6 +1,5 @@
 import { Suspense } from 'react'
 import { getEmployees, getDepartments } from '@/lib/actions/data-actions'
-import { Button } from '@/components/ui/button'
 import EmployeesContainer from '@/components/dashboard/employees-container'
 import { EmployeeListSkeleton } from '@/components/ui/skeleton'
 import { isError } from '@/lib/utils/async-helpers'
@@ -30,14 +29,11 @@ async function EmployeesContent() {
 export default function EmployeesPage() {
   return (
     <div className="p-8 space-y-8">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Employees</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage your team members and their assignments
-          </p>
-        </div>
-        <Button>+ Add Employee</Button>
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">Employees</h1>
+        <p className="text-muted-foreground mt-2">
+          Manage your team members and their assignments
+        </p>
       </div>
 
       <Suspense fallback={<EmployeeListSkeleton />}>

@@ -1,6 +1,6 @@
 'use server'
 
-import { connectToDatabase } from '@/lib/mongodb'
+import { getSupabase } from '@/lib/supabase'
 import { getSessionFromCookies } from '@/lib/auth'
 import { DEFAULT_ROLES, type Permission } from '@/lib/permissions'
 
@@ -8,9 +8,14 @@ export async function updateUserRole(userId: string, role: string) {
   const session = await getSessionFromCookies()
   if (!session) return { error: 'Not authenticated' }
 
-  const { db } = await connectToDatabase()
+  const supabase = getSupabase()
 
-  const currentProfile = await db.collection('profiles').findOne({ user_id: session.userId })
+  const { data: currentProfile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', session.userId)
+    .single()
+
   if (!currentProfile) return { error: 'Not authenticated' }
 
   const roleName = currentProfile.role
@@ -18,10 +23,12 @@ export async function updateUserRole(userId: string, role: string) {
   if (DEFAULT_ROLES[roleName]) {
     perms = DEFAULT_ROLES[roleName].permissions
   } else {
-    const customRole = await db.collection('roles').findOne({
-      team_id: currentProfile.team_id,
-      name: roleName,
-    })
+    const { data: customRole } = await supabase
+      .from('roles')
+      .select('permissions')
+      .eq('team_id', currentProfile.team_id)
+      .eq('name', roleName)
+      .single()
     perms = customRole?.permissions || []
   }
 
@@ -29,18 +36,28 @@ export async function updateUserRole(userId: string, role: string) {
     return { error: "You don't have permission to assign roles" }
   }
 
-  const targetProfile = await db.collection('profiles').findOne({ user_id: userId })
+  const { data: targetProfile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', userId)
+    .single()
+
   if (targetProfile?.role === 'ADMIN') {
-    const adminCount = await db.collection('profiles').countDocuments({ role: 'ADMIN' })
-    if (adminCount === 1) {
+    const { count: adminCount } = await supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'ADMIN')
+
+    if ((adminCount || 0) === 1) {
       return { error: 'Cannot change the role of the last admin' }
     }
   }
 
-  await db.collection('profiles').updateOne(
-    { user_id: userId },
-    { $set: { role, updated_at: new Date() } }
-  )
+  const { error } = await supabase
+    .from('profiles')
+    .update({ role, updated_at: new Date().toISOString() })
+    .eq('id', userId)
 
+  if (error) return { error: error.message }
   return { success: true }
 }

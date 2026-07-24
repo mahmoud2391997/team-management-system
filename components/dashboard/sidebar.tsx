@@ -10,25 +10,45 @@ import { Label } from '@/components/ui/label'
 import { ChevronLeft, Menu, Users, Briefcase, CheckSquare, Settings, LogOut, Settings2, UserPlus, Bell, ChevronsUpDown, Check, User, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logout } from '@/lib/actions/auth-actions'
-import { getUserTeams, switchTeam } from '@/app/actions/invitations'
+import { getUserTeams, switchTeam, getUnreadNotificationCount } from '@/app/actions/invitations'
 import { usePermissions } from '@/components/dashboard/permissions-context'
 
-const allMenuItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: Menu, permission: 'dashboard.view' as const },
-  { href: '/employees', label: 'Employees', icon: Users, permission: 'employees.view' as const },
-  { href: '/departments', label: 'Departments', icon: Briefcase, permission: 'departments.view' as const },
-  { href: '/tasks', label: 'Tasks', icon: CheckSquare, permission: 'tasks.view' as const },
-  { href: '/members', label: 'Members', icon: UserPlus, permission: 'members.view' as const },
-  { href: '/roles', label: 'Roles & Permissions', icon: Settings, permission: 'roles.manage' as const },
-  { href: '/notifications', label: 'Notifications', icon: Bell, permission: null },
-  { href: '/profile', label: 'Profile', icon: User, permission: null },
-  { href: '/settings', label: 'Settings', icon: Settings2, permission: null },
+const menuSections = [
+  {
+    label: 'Main',
+    items: [
+      { href: '/dashboard', label: 'Dashboard', icon: Menu, permission: 'dashboard.view' as const },
+      { href: '/employees', label: 'Employees', icon: Users, permission: 'employees.view' as const },
+      { href: '/departments', label: 'Departments', icon: Briefcase, permission: 'departments.view' as const },
+      { href: '/tasks', label: 'Tasks', icon: CheckSquare, permission: 'tasks.view' as const },
+    ],
+  },
+  {
+    label: 'Team',
+    items: [
+      { href: '/members', label: 'Members', icon: UserPlus, permission: 'members.view' as const },
+      { href: '/roles', label: 'Roles & Permissions', icon: Settings, permission: 'roles.manage' as const },
+      { href: '/settings', label: 'Settings', icon: Settings2, permission: null },
+    ],
+  },
+  {
+    label: 'Account',
+    items: [
+      { href: '/profile', label: 'Profile', icon: User, permission: null },
+      { href: '/notifications', label: 'Notifications', icon: Bell, permission: null },
+    ],
+  },
 ]
 
-const noTeamItems = [
-  { href: '/create-team', label: 'Create Team', icon: Plus },
-  { href: '/notifications', label: 'Notifications', icon: Bell },
-  { href: '/profile', label: 'Profile', icon: User },
+const noTeamSections = [
+  {
+    label: null,
+    items: [
+      { href: '/create-team', label: 'Create Team', icon: Plus },
+      { href: '/notifications', label: 'Notifications', icon: Bell },
+      { href: '/profile', label: 'Profile', icon: User },
+    ],
+  },
 ]
 
 export function Sidebar({ userRole }: { userRole?: string }) {
@@ -43,7 +63,7 @@ export function Sidebar({ userRole }: { userRole?: string }) {
   })
   const [unreadCount, setUnreadCount] = useState(0)
   const pathname = usePathname()
-  const { permissions, refreshPermissions } = usePermissions()
+  const { permissions, loading: permsLoading, refreshPermissions } = usePermissions()
 
   useEffect(() => {
     let cancelled = false
@@ -68,11 +88,31 @@ export function Sidebar({ userRole }: { userRole?: string }) {
     return () => { cancelled = true }
   }, [])
 
-  const menuItems = useMemo(() => {
-    if (!teamData.hasTeam) return noTeamItems
-    if (permissions.length === 0) return []
-    return allMenuItems.filter(item => !item.permission || permissions.includes(item.permission as any))
-  }, [teamData.hasTeam, permissions])
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const result = await getUnreadNotificationCount()
+      if (result.success) setUnreadCount(result.count)
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    const refresh = async () => {
+      const result = await getUnreadNotificationCount()
+      if (result.success) setUnreadCount(result.count)
+    }
+    refresh()
+  }, [pathname])
+
+  const sections = useMemo(() => {
+    if (!teamData.hasTeam) return noTeamSections
+    if (permsLoading) return menuSections.map(s => ({ ...s, items: s.items.filter(i => !i.permission) }))
+    if (permissions.length === 0) return noTeamSections
+    return menuSections.map(section => ({
+      ...section,
+      items: section.items.filter(item => !item.permission || permissions.includes(item.permission as any)),
+    })).filter(section => section.items.length > 0)
+  }, [teamData.hasTeam, permissions, permsLoading])
 
   const handleSwitchTeam = useCallback(async (teamId: string) => {
     await switchTeam(teamId)
@@ -152,31 +192,46 @@ export function Sidebar({ userRole }: { userRole?: string }) {
         </div>
       )}
 
-      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
-        {menuItems.map((item) => {
-          const Icon = item.icon
-          const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-          return (
-            <Link key={item.href} href={item.href} title={collapsed ? item.label : undefined}>
-              <Button
-                variant={isActive ? 'default' : 'ghost'}
-                size="sm"
-                className={cn(
-                  'w-full justify-start outline relative h-10 text-sm',
-                  collapsed ? 'px-2 justify-center' : 'px-3'
-                )}
-              >
-                <Icon className="w-5 h-5 shrink-0" />
-                {!collapsed && <span className="ml-3 font-medium">{item.label}</span>}
-                {item.href === '/notifications' && unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center font-bold">
-                    {unreadCount}
-                  </span>
-                )}
-              </Button>
-            </Link>
-          )
-        })}
+      <nav className="flex-1 p-2 space-y-3 overflow-y-auto">
+        {sections.map((section, sectionIdx) => (
+          <div key={sectionIdx}>
+            {section.label && !collapsed && (
+              <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wider px-3 mb-1">
+                {section.label}
+              </p>
+            )}
+            {section.label && collapsed && <div className="border-t border-border mx-2 mb-1" />}
+            <div className="space-y-0.5">
+              {section.items.map((item) => {
+                const Icon = item.icon
+                const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                return (
+                  <Link key={item.href} href={item.href} title={collapsed ? item.label : undefined}>
+                    <Button
+                      variant={isActive ? 'default' : 'ghost'}
+                      size="sm"
+                      className={cn(
+                        'w-full justify-start outline relative h-10 text-sm',
+                        collapsed ? 'px-2 justify-center' : 'px-3'
+                      )}
+                    >
+                      <Icon className="w-5 h-5 shrink-0" />
+                      {!collapsed && <span className="ml-3 font-medium">{item.label}</span>}
+                      {item.href === '/notifications' && unreadCount > 0 && (
+                        <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center font-bold">
+                          {unreadCount}
+                        </span>
+                      )}
+                    </Button>
+                  </Link>
+                )
+              })}
+            </div>
+            {sectionIdx < sections.length - 1 && !collapsed && (
+              <div className="border-t border-border mx-3 mt-2" />
+            )}
+          </div>
+        ))}
       </nav>
 
       <div className="p-2 border-t border-border space-y-1">
@@ -186,7 +241,7 @@ export function Sidebar({ userRole }: { userRole?: string }) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={async () => { await logout(); window.location.href = '/auth/login' }}
+          onClick={async () => { await logout(); window.location.href = '/' }}
           className={cn(
             'w-full outline text-destructive hover:text-destructive h-10 text-sm',
             collapsed ? 'px-2 justify-center' : 'px-3 justify-start'

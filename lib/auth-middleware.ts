@@ -44,6 +44,13 @@ function verifyTokenEdge(token: string): { userId: string; email: string } | nul
 
 export async function updateSession(request: NextRequest) {
   const token = request.cookies.get('auth-token')?.value
+  const noCacheHeaders = {
+    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0, private',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+  }
 
   if (!token) {
     if (isProtectedRoute(request.nextUrl.pathname)) {
@@ -51,7 +58,9 @@ export async function updateSession(request: NextRequest) {
       url.pathname = '/auth/login'
       return NextResponse.redirect(url)
     }
-    return NextResponse.next()
+    const response = NextResponse.next()
+    Object.entries(noCacheHeaders).forEach(([key, value]) => response.headers.set(key, value))
+    return response
   }
 
   let payload: { userId: string; email: string } | null = null
@@ -75,5 +84,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  return NextResponse.next()
+  const response = NextResponse.next()
+  Object.entries(noCacheHeaders).forEach(([key, value]) => response.headers.set(key, value))
+  return response
 }

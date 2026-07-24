@@ -1,16 +1,20 @@
 'use server'
 
-import { connectToDatabase } from '@/lib/mongodb'
+import { getSupabase } from '@/lib/supabase'
 import { getSessionFromCookies } from '@/lib/auth'
-import { ObjectId } from 'mongodb'
 import { DEFAULT_ROLES, type Permission } from '@/lib/permissions'
 
-async function checkPermission(permission: Permission): Promise<{ allowed: boolean; profile?: any; db?: any }> {
+async function checkPermission(permission: Permission): Promise<{ allowed: boolean; profile?: any }> {
   const session = await getSessionFromCookies()
   if (!session) return { allowed: false }
 
-  const { db } = await connectToDatabase()
-  const profile = await db.collection('profiles').findOne({ user_id: session.userId })
+  const supabase = getSupabase()
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', session.userId)
+    .single()
+
   if (!profile) return { allowed: false }
 
   const roleName = profile.role
@@ -19,19 +23,21 @@ async function checkPermission(permission: Permission): Promise<{ allowed: boole
   if (DEFAULT_ROLES[roleName]) {
     perms = DEFAULT_ROLES[roleName].permissions
   } else {
-    const customRole = await db.collection('roles').findOne({
-      team_id: profile.team_id,
-      name: roleName,
-    })
+    const { data: customRole } = await supabase
+      .from('roles')
+      .select('permissions')
+      .eq('team_id', profile.team_id)
+      .eq('name', roleName)
+      .single()
     perms = customRole?.permissions || []
   }
 
   if (!perms.includes(permission)) return { allowed: false }
-  return { allowed: true, profile, db }
+  return { allowed: true, profile }
 }
 
 export async function inviteMember(email: string, role: string) {
-  const { allowed, profile: currentProfile, db } = await checkPermission('members.invite')
+  const { allowed, profile: currentProfile } = await checkPermission('members.invite')
   if (!allowed || !currentProfile) return { error: 'You don\'t have permission to invite members' }
 
   const session = await getSessionFromCookies()
@@ -42,39 +48,68 @@ export async function inviteMember(email: string, role: string) {
     return { error: 'You cannot invite yourself to the team' }
   }
 
-  const targetProfile = await db.collection('profiles').findOne({ email: email.trim().toLowerCase() })
-  if (targetProfile) {
-    const existingMember = await db.collection('team_members').findOne({
-      user_id: targetProfile.user_id,
-      team_id: teamId,
-    })
+  const supabase = getSupabase()
+
+  const emailLower = email.trim().toLowerCase()
+
+  const { data: existingUser } = await supabase
+    .from('users')
+    .select('id')
+    .eq('email', emailLower)
+    .single()
+
+  const isRegistered = !!existingUser
+
+  if (existingUser) {
+    const { data: existingMember } = await supabase
+      .from('team_members')
+      .select('id, role')
+      .eq('user_id', existingUser.id)
+      .eq('team_id', teamId)
+      .single()
+
     if (existingMember) {
+      await supabase
+        .from('profiles')
+        .update({ team_id: teamId, role: existingMember.role || role, updated_at: new Date().toISOString() })
+        .eq('id', existingUser.id)
+
       return { error: 'This user is already on your team' }
     }
   }
 
-  const existingInvite = await db.collection('invitations').findOne({
-    email: email.trim().toLowerCase(),
-    team_id: teamId,
-    accepted_at: null,
-  })
+  const { data: existingInvite } = await supabase
+    .from('invitations')
+    .select('id')
+    .eq('email', email.trim().toLowerCase())
+    .eq('team_id', teamId)
+    .is('accepted_at', null)
+    .single()
+
   if (existingInvite) {
     return { error: 'This email already has a pending invitation' }
   }
 
-  const inviteResult = await db.collection('invitations').insertOne({
-    team_id: teamId,
-    email: email.trim().toLowerCase(),
-    role,
-    invited_by: session.userId,
-    accepted_at: null,
-    created_at: new Date(),
-    updated_at: new Date(),
-  })
+  const { data: inviteResult, error: inviteError } = await supabase
+    .from('invitations')
+    .insert({
+      team_id: teamId,
+      email: email.trim().toLowerCase(),
+      role,
+      invited_by: session.userId,
+    })
+    .select('id')
+    .single()
 
-  const inviteId = inviteResult.insertedId.toString()
+  if (inviteError) return { error: inviteError.message }
 
-  const team = await db.collection('teams').findOne({ _id: new ObjectId(teamId) })
+  const inviteId = inviteResult.id
+
+  const { data: team } = await supabase
+    .from('Team')
+    .select('name')
+    .eq('id', teamId)
+    .single()
 
   const siteUrl = process.env.SITE_URL || 'http://localhost:3000'
   let emailSent = false
@@ -83,7 +118,7 @@ export async function inviteMember(email: string, role: string) {
   try {
     const { sendTeamInviteEmail, sendSignupInviteEmail } = await import('@/lib/email')
 
-    if (targetProfile) {
+    if (isRegistered) {
       await sendTeamInviteEmail({
         to: email.trim(),
         teamName: team?.name || 'a team',
@@ -105,75 +140,116 @@ export async function inviteMember(email: string, role: string) {
     emailError = e.message || 'Failed to send email'
   }
 
-  if (targetProfile) {
-    await db.collection('notifications').insertOne({
-      user_id: targetProfile.user_id,
-      type: 'team_invitation',
-      title: 'Team Invitation',
-      message: `You've been invited to join ${team?.name || 'a team'} as ${role}`,
-      data: {
-        invitation_id: inviteId,
-        team_id: teamId,
-        team_name: team?.name,
-        role,
-        invited_by: session.email,
-      },
-      read: false,
-      team_id: teamId,
-      created_at: new Date(),
-      updated_at: new Date(),
-    })
+  if (isRegistered) {
+    try {
+      await supabase
+        .from('notifications')
+        .insert({
+          user_id: existingUser!.id,
+          type: 'team_invitation',
+          title: 'Team Invitation',
+          message: `You've been invited to join ${team?.name || 'a team'} as ${role}`,
+          data: {
+            invitation_id: inviteId,
+            team_id: teamId,
+            team_name: team?.name,
+            role,
+            invited_by: session.email,
+          },
+          read: false,
+        })
+    } catch (e) {
+      console.error('Notification insert failed:', e)
+    }
   }
 
   if (!emailSent) {
-    return { success: true, message: `Invitation recorded but email failed: ${emailError}. The user can still join via the notification.` }
+    return { success: true, message: `Invitation recorded but email failed: ${emailError}. The user can still join via the notification.`, isRegistered }
   }
 
-  return { success: true, message: `Invitation email sent to ${email}` }
+  if (isRegistered) {
+    return { success: true, message: `Invitation sent to ${email} (existing user — login link sent)`, isRegistered }
+  }
+
+  return { success: true, message: `Invitation sent to ${email} (new user — signup link sent)`, isRegistered }
 }
 
 export async function getNotifications() {
   const session = await getSessionFromCookies()
   if (!session) return { error: 'Not authenticated', data: [] }
 
-  const { db } = await connectToDatabase()
+  const supabase = getSupabase()
 
-  const data = await db.collection('notifications')
-    .find({ user_id: session.userId })
-    .sort({ created_at: -1 })
-    .toArray()
+  const { data } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('user_id', session.userId)
+    .order('created_at', { ascending: false })
 
   const validNotifications: any[] = []
 
-  for (const n of data) {
+  for (const n of (data || [])) {
     if (n.type === 'team_invitation') {
       const nData = typeof n.data === 'string' ? JSON.parse(n.data) : n.data
-      if (!nData?.invitation_id) continue
+      if (!nData?.invitation_id) {
+        await supabase.from('notifications').delete().eq('id', n.id)
+        continue
+      }
 
-      const inviteCheck = await db.collection('invitations').findOne({
-        _id: new ObjectId(nData.invitation_id),
-      })
+      const { data: inviteCheck } = await supabase
+        .from('invitations')
+        .select('id, accepted_at')
+        .eq('id', nData.invitation_id)
+        .single()
 
-      if (!inviteCheck) {
-        await db.collection('notifications').deleteOne({ _id: n._id })
+      if (!inviteCheck || inviteCheck.accepted_at) {
+        await supabase.from('notifications').delete().eq('id', n.id)
         continue
       }
     }
-    validNotifications.push({
-      ...n,
-      _id: n._id.toString(),
-    })
+    validNotifications.push(n)
   }
 
   return { success: true, data: validNotifications }
 }
 
 export async function markNotificationRead(notificationId: string) {
-  const { db } = await connectToDatabase()
-  await db.collection('notifications').updateOne(
-    { _id: new ObjectId(notificationId) },
-    { $set: { read: true, updated_at: new Date() } }
-  )
+  const supabase = getSupabase()
+  await supabase
+    .from('notifications')
+    .update({ read: true, updated_at: new Date().toISOString() })
+    .eq('id', notificationId)
+
+  return { success: true }
+}
+
+export async function getUnreadNotificationCount() {
+  const session = await getSessionFromCookies()
+  if (!session) return { success: true, count: 0 }
+
+  const supabase = getSupabase()
+
+  const { count } = await supabase
+    .from('notifications')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', session.userId)
+    .eq('read', false)
+
+  return { success: true, count: count || 0 }
+}
+
+export async function markAllNotificationsRead() {
+  const session = await getSessionFromCookies()
+  if (!session) return { success: false }
+
+  const supabase = getSupabase()
+
+  await supabase
+    .from('notifications')
+    .update({ read: true, updated_at: new Date().toISOString() })
+    .eq('user_id', session.userId)
+    .eq('read', false)
+
   return { success: true }
 }
 
@@ -181,52 +257,108 @@ export async function acceptTeamInvitation(notificationId: string) {
   const session = await getSessionFromCookies()
   if (!session) return { error: 'Not authenticated' }
 
-  const { db } = await connectToDatabase()
+  const supabase = getSupabase()
 
-  const notification = await db.collection('notifications').findOne({
-    _id: new ObjectId(notificationId),
-    user_id: session.userId,
-  })
+  const { data: notification, error: notifError } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('id', notificationId)
+    .eq('user_id', session.userId)
+    .single()
 
-  if (!notification) return { error: 'Notification not found' }
+  console.log('Accept invitation - notification:', notification, 'error:', notifError)
+
+  if (notifError || !notification) return { error: 'Notification not found' }
 
   const data = typeof notification.data === 'string'
     ? JSON.parse(notification.data)
     : notification.data
 
+  console.log('Accept invitation - data:', data)
+
+  if (!data) return { error: 'Invalid notification data' }
+
   const { invitation_id, team_id, role } = data
 
-  await db.collection('team_members').updateOne(
-    { user_id: session.userId, team_id },
-    {
-      $set: {
+  console.log('Accept invitation - team_id:', team_id, 'role:', role, 'invitation_id:', invitation_id)
+
+  if (!team_id) return { error: 'No team associated with this invitation' }
+
+  const { data: existingMember } = await supabase
+    .from('team_members')
+    .select('id')
+    .eq('user_id', session.userId)
+    .eq('team_id', team_id)
+    .single()
+
+  console.log('Accept invitation - existingMember:', existingMember)
+
+  if (existingMember) {
+    await supabase
+      .from('team_members')
+      .update({ role: role || 'EMPLOYEE', is_active: true, updated_at: new Date().toISOString() })
+      .eq('id', existingMember.id)
+  } else {
+    const { data: insertResult, error: memberError } = await supabase
+      .from('team_members')
+      .insert({
         user_id: session.userId,
         team_id,
-        role,
+        role: role || 'EMPLOYEE',
         is_active: true,
-        updated_at: new Date(),
-      },
-      $setOnInsert: { created_at: new Date() },
-    },
-    { upsert: true }
-  )
+      })
+      .select()
 
-  await db.collection('profiles').updateOne(
-    { user_id: session.userId },
-    { $set: { team_id, role, updated_at: new Date() } }
-  )
+    console.log('Accept invitation - insert result:', insertResult, 'error:', memberError)
 
-  if (invitation_id) {
-    await db.collection('invitations').updateOne(
-      { _id: new ObjectId(invitation_id) },
-      { $set: { accepted_at: new Date(), updated_at: new Date() } }
-    )
+    if (memberError) return { error: `Failed to join team: ${memberError.message}` }
   }
 
-  await db.collection('notifications').updateOne(
-    { _id: new ObjectId(notificationId) },
-    { $set: { read: true, updated_at: new Date() } }
-  )
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .update({ team_id, role: role || 'EMPLOYEE', updated_at: new Date().toISOString() })
+    .eq('id', session.userId)
+
+  console.log('Accept invitation - profile update error:', profileError)
+
+  // If profile doesn't exist, create it
+  if (profileError) {
+    console.log('Profile update failed, trying to create profile')
+    const { data: userData } = await supabase
+      .from('users')
+      .select('email')
+      .eq('id', session.userId)
+      .single()
+
+    const { error: createError } = await supabase
+      .from('profiles')
+      .insert({
+        id: session.userId,
+        email: userData?.email || session.email,
+        team_id,
+        role: role || 'EMPLOYEE',
+        first_name: null,
+        last_name: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+
+    console.log('Accept invitation - profile create error:', createError)
+
+    if (createError) return { error: `Failed to create profile: ${createError.message}` }
+  }
+
+  if (invitation_id) {
+    await supabase
+      .from('invitations')
+      .update({ accepted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', invitation_id)
+  }
+
+  await supabase
+    .from('notifications')
+    .update({ read: true, updated_at: new Date().toISOString() })
+    .eq('id', notificationId)
 
   return { success: true }
 }
@@ -235,15 +367,22 @@ export async function switchTeam(teamId: string) {
   const session = await getSessionFromCookies()
   if (!session) return { error: 'Not authenticated' }
 
-  const { db } = await connectToDatabase()
+  const supabase = getSupabase()
 
-  const membership = await db.collection('team_members').findOne({
-    user_id: session.userId,
-    team_id: teamId,
-  })
+  const { data: membership } = await supabase
+    .from('team_members')
+    .select('*')
+    .eq('user_id', session.userId)
+    .eq('team_id', teamId)
+    .single()
 
   if (!membership) {
-    const profile = await db.collection('profiles').findOne({ user_id: session.userId })
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('team_id')
+      .eq('id', session.userId)
+      .single()
+
     if (profile?.team_id !== teamId) {
       return { error: 'You are not a member of this team' }
     }
@@ -251,20 +390,22 @@ export async function switchTeam(teamId: string) {
 
   const teamRole = membership?.role || 'EMPLOYEE'
 
-  await db.collection('profiles').updateOne(
-    { user_id: session.userId },
-    { $set: { team_id: teamId, role: teamRole, updated_at: new Date() } }
-  )
+  await supabase
+    .from('profiles')
+    .update({ team_id: teamId, role: teamRole, updated_at: new Date().toISOString() })
+    .eq('id', session.userId)
 
-  await db.collection('team_members').updateOne(
-    { user_id: session.userId, team_id: teamId },
-    { $set: { is_active: true, updated_at: new Date() } }
-  )
+  await supabase
+    .from('team_members')
+    .update({ is_active: true, updated_at: new Date().toISOString() })
+    .eq('user_id', session.userId)
+    .eq('team_id', teamId)
 
-  await db.collection('team_members').updateMany(
-    { user_id: session.userId, team_id: { $ne: teamId } },
-    { $set: { is_active: false, updated_at: new Date() } }
-  )
+  await supabase
+    .from('team_members')
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq('user_id', session.userId)
+    .neq('team_id', teamId)
 
   return { success: true }
 }
@@ -273,31 +414,38 @@ export async function getUserTeams() {
   const session = await getSessionFromCookies()
   if (!session) return { error: 'Not authenticated', data: [] }
 
-  const { db } = await connectToDatabase()
+  const supabase = getSupabase()
 
-  const profile = await db.collection('profiles').findOne({ user_id: session.userId })
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('team_id')
+    .eq('id', session.userId)
+    .single()
+
   const activeTeamId = profile?.team_id || null
 
-  const memberTeams = await db.collection('team_members')
-    .find({ user_id: session.userId })
-    .toArray()
+  const { data: memberTeams } = await supabase
+    .from('team_members')
+    .select('team_id')
+    .eq('user_id', session.userId)
 
-  const teamIds = [...new Set(memberTeams.map(m => m.team_id))]
+  const teamIds = [...new Set((memberTeams || []).map(m => m.team_id))]
 
   if (teamIds.length === 0) return { success: true, data: [], activeTeamId: null }
 
-  const teams = await db.collection('teams')
-    .find({ _id: { $in: teamIds.map(id => new ObjectId(id)) } })
-    .toArray()
+  const { data: teams } = await supabase
+    .from('Team')
+    .select('id, name')
+    .in('id', teamIds)
 
-  const result = teams.map(t => ({ id: t._id.toString(), name: t.name }))
+  const result = (teams || []).map(t => ({ id: t.id, name: t.name }))
 
   if (activeTeamId && !result.find(t => t.id === activeTeamId) && result.length > 0) {
     const fallback = result[0]
-    await db.collection('profiles').updateOne(
-      { user_id: session.userId },
-      { $set: { team_id: fallback.id, updated_at: new Date() } }
-    )
+    await supabase
+      .from('profiles')
+      .update({ team_id: fallback.id, updated_at: new Date().toISOString() })
+      .eq('id', session.userId)
     return { success: true, data: result, activeTeamId: fallback.id }
   }
 
@@ -308,61 +456,80 @@ export async function getPendingInvites() {
   const session = await getSessionFromCookies()
   if (!session) return { error: 'Not authenticated', data: [] }
 
-  const { db } = await connectToDatabase()
+  const supabase = getSupabase()
 
-  const profile = await db.collection('profiles').findOne({ user_id: session.userId })
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('team_id')
+    .eq('id', session.userId)
+    .single()
+
   if (!profile?.team_id) return { error: 'No team', data: [] }
 
-  const data = await db.collection('invitations')
-    .find({ team_id: profile.team_id, accepted_at: null })
-    .sort({ created_at: -1 })
-    .toArray()
+  const { data } = await supabase
+    .from('invitations')
+    .select('*')
+    .eq('team_id', profile.team_id)
+    .is('accepted_at', null)
+    .order('created_at', { ascending: false })
 
   return {
     success: true,
-    data: data.map(d => ({
-      ...d,
-      _id: d._id.toString(),
-      id: d._id.toString(),
-    })),
+    data: data || [],
   }
 }
 
 export async function revokeInvite(inviteId: string) {
-  const { allowed, profile: currentProfile, db } = await checkPermission('members.remove')
+  const { allowed, profile: currentProfile } = await checkPermission('members.remove')
   if (!allowed || !currentProfile) return { error: 'You don\'t have permission to revoke invitations' }
 
-  const invite = await db.collection('invitations').findOne({
-    _id: new ObjectId(inviteId),
-    team_id: currentProfile.team_id,
-  })
+  const supabase = getSupabase()
+
+  const { data: invite } = await supabase
+    .from('invitations')
+    .select('*')
+    .eq('id', inviteId)
+    .eq('team_id', currentProfile.team_id)
+    .single()
 
   if (!invite) return { error: 'Invitation not found' }
 
-  const targetProfile = await db.collection('profiles').findOne({ email: invite.email })
+  const { data: targetProfile } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('email', invite.email)
+    .single()
+
   if (targetProfile) {
-    await db.collection('notifications').deleteOne({
-      user_id: targetProfile.user_id,
-      type: 'team_invitation',
-      'data.invitation_id': inviteId,
-    })
+    try {
+      await supabase
+        .from('notifications')
+        .delete()
+        .eq('user_id', targetProfile.id)
+        .eq('type', 'team_invitation')
+    } catch (e) {
+      console.error('Failed to delete notification:', e)
+    }
   }
 
-  await db.collection('invitations').deleteOne({
-    _id: new ObjectId(inviteId),
-    team_id: currentProfile.team_id,
-  })
+  await supabase
+    .from('invitations')
+    .delete()
+    .eq('id', inviteId)
+    .eq('team_id', currentProfile.team_id)
 
   return { success: true }
 }
 
 export async function checkInvitation(email: string) {
-  const { db } = await connectToDatabase()
+  const supabase = getSupabase()
 
-  const data = await db.collection('invitations').findOne({
-    email: email.trim().toLowerCase(),
-    accepted_at: null,
-  })
+  const { data } = await supabase
+    .from('invitations')
+    .select('team_id, role')
+    .eq('email', email.trim().toLowerCase())
+    .is('accepted_at', null)
+    .single()
 
   if (!data) return { invited: false }
   return {
@@ -373,39 +540,122 @@ export async function checkInvitation(email: string) {
 }
 
 export async function createInviteNotifications(userId: string, email: string) {
-  const { db } = await connectToDatabase()
+  const supabase = getSupabase()
 
-  const pendingInvites = await db.collection('invitations')
-    .find({ email: email.toLowerCase().trim(), accepted_at: null })
-    .toArray()
+  const { data: pendingInvites } = await supabase
+    .from('invitations')
+    .select('*')
+    .eq('email', email.toLowerCase().trim())
+    .is('accepted_at', null)
 
-  for (const invite of pendingInvites) {
-    const existingNotif = await db.collection('notifications').findOne({
-      user_id: userId,
-      type: 'team_invitation',
-      'data.invitation_id': invite._id.toString(),
-    })
+  for (const invite of (pendingInvites || [])) {
+    const { data: existingNotif } = await supabase
+      .from('notifications')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('type', 'team_invitation')
+      .single()
+
     if (existingNotif) continue
 
-    const team = await db.collection('teams').findOne({ _id: new ObjectId(invite.team_id) })
-    const invitedByUser = await db.collection('users').findOne({ _id: new ObjectId(invite.invited_by) })
+    const { data: team } = await supabase
+      .from('Team')
+      .select('name')
+      .eq('id', invite.team_id)
+      .single()
 
-    await db.collection('notifications').insertOne({
-      user_id: userId,
-      type: 'team_invitation',
-      title: 'Team Invitation',
-      message: `You've been invited to join ${team?.name || 'a team'} as ${invite.role}`,
-      data: {
-        invitation_id: invite._id.toString(),
-        team_id: invite.team_id,
-        team_name: team?.name,
-        role: invite.role,
-        invited_by: invitedByUser?.email || 'Someone',
-      },
-      read: false,
-      team_id: invite.team_id,
-      created_at: new Date(),
-      updated_at: new Date(),
-    })
+    const { data: invitedByUser } = await supabase
+      .from('users')
+      .select('email')
+      .eq('id', invite.invited_by)
+      .single()
+
+    await supabase
+      .from('notifications')
+      .insert({
+        user_id: userId,
+        type: 'team_invitation',
+        title: 'Team Invitation',
+        message: `You've been invited to join ${team?.name || 'a team'} as ${invite.role}`,
+        data: {
+          invitation_id: invite.id,
+          team_id: invite.team_id,
+          team_name: team?.name,
+          role: invite.role,
+          invited_by: invitedByUser?.email || 'Someone',
+        },
+        read: false,
+      })
   }
+}
+
+export async function declineTeamInvitation(notificationId: string) {
+  const session = await getSessionFromCookies()
+  if (!session) return { error: 'Not authenticated' }
+
+  const supabase = getSupabase()
+
+  const { data: notification } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('id', notificationId)
+    .eq('user_id', session.userId)
+    .single()
+
+  if (!notification) return { error: 'Notification not found' }
+
+  const data = typeof notification.data === 'string'
+    ? JSON.parse(notification.data)
+    : notification.data
+
+  const { invitation_id, team_id, team_name } = data
+
+  await supabase
+    .from('notifications')
+    .update({
+      type: 'invitation_declined',
+      title: 'Invitation Declined',
+      message: `You declined the invitation to join ${team_name || 'a team'}`,
+      read: true,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', notificationId)
+
+  if (invitation_id) {
+    const { data: invite } = await supabase
+      .from('invitations')
+      .select('*')
+      .eq('id', invitation_id)
+      .single()
+
+    if (invite) {
+      const { data: inviterUser } = await supabase
+        .from('users')
+        .select('id, email')
+        .eq('id', invite.invited_by)
+        .single()
+
+      if (inviterUser) {
+        await supabase
+          .from('notifications')
+          .insert({
+            user_id: inviterUser.id,
+            type: 'invitation_declined',
+            title: 'Invitation Declined',
+            message: `${session.email || 'Someone'} declined the invitation to join ${team_name || 'your team'}`,
+            data: {
+              invitation_id,
+              team_id,
+              team_name,
+              declined_by: session.email,
+            },
+            read: false,
+          })
+      }
+    }
+
+    await supabase.from('invitations').delete().eq('id', invitation_id)
+  }
+
+  return { success: true }
 }

@@ -1,17 +1,21 @@
 'use server'
 
-import { connectToDatabase } from '@/lib/mongodb'
+import { getSupabase } from '@/lib/supabase'
 import { getSessionFromCookies } from '@/lib/auth'
-import { ObjectId } from 'mongodb'
 import { DEFAULT_ROLES, type Permission } from '@/lib/permissions'
 
 export async function deleteTeam(teamId: string) {
   const session = await getSessionFromCookies()
   if (!session) return { error: 'Not authenticated' }
 
-  const { db } = await connectToDatabase()
+  const supabase = getSupabase()
 
-  const profile = await db.collection('profiles').findOne({ user_id: session.userId })
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', session.userId)
+    .single()
+
   if (!profile) return { error: 'Not authenticated' }
 
   const roleName = profile.role
@@ -19,71 +23,68 @@ export async function deleteTeam(teamId: string) {
   if (DEFAULT_ROLES[roleName]) {
     perms = DEFAULT_ROLES[roleName].permissions
   } else {
-    const customRole = await db.collection('roles').findOne({
-      team_id: profile.team_id,
-      name: roleName,
-    })
+    const { data: customRole } = await supabase
+      .from('roles')
+      .select('permissions')
+      .eq('team_id', profile.team_id)
+      .eq('name', roleName)
+      .single()
     perms = customRole?.permissions || []
   }
 
-  if (!perms.includes('team.delete')) {
-    return { error: "You don't have permission to delete the team" }
-  }
+  if (!perms.includes('team.delete')) return { error: "You don't have permission to delete the team" }
 
-  const team = await db.collection('teams').findOne({ _id: new ObjectId(teamId) })
+  const { data: team } = await supabase.from('Team').select('*').eq('id', teamId).single()
   if (!team) return { error: 'Team not found' }
-  if (team.owner_id !== session.userId) {
-    return { error: 'Only the team owner can delete the team' }
-  }
+  if (team.owner_id !== session.userId) return { error: 'Only the team owner can delete the team' }
 
-  const departments = await db.collection('departments').find({ team_id: teamId }).toArray()
-  const deptIds = departments.map(d => d._id.toString())
+  const { data: departments } = await supabase.from('departments').select('id').eq('team_id', teamId)
+  const deptIds = (departments || []).map(d => d.id)
 
   if (deptIds.length > 0) {
-    const tasks = await db.collection('tasks').find({ department_id: { $in: deptIds } }).toArray()
-    const taskIds = tasks.map(t => t._id.toString())
-
+    const { data: tasks } = await supabase.from('tasks').select('id').in('department_id', deptIds)
+    const taskIds = (tasks || []).map(t => t.id)
     if (taskIds.length > 0) {
-      await db.collection('subtasks').deleteMany({ task_id: { $in: taskIds } })
-      await db.collection('comments').deleteMany({ task_id: { $in: taskIds } })
-      await db.collection('tasks').deleteMany({ _id: { $in: taskIds.map(id => new ObjectId(id)) } })
+      await supabase.from('subtasks').delete().in('task_id', taskIds)
+      await supabase.from('comments').delete().in('task_id', taskIds)
+      await supabase.from('tasks').delete().in('id', taskIds)
     }
-
-    await db.collection('employees').deleteMany({ department_id: { $in: deptIds } })
-    await db.collection('departments').deleteMany({ team_id: teamId })
+    await supabase.from('employees').delete().in('department_id', deptIds)
+    await supabase.from('departments').delete().eq('team_id', teamId)
   }
 
-  const members = await db.collection('team_members').find({ team_id: teamId }).toArray()
-  const memberIds = members.map(m => m.user_id)
+  const { data: members } = await supabase.from('team_members').select('user_id').eq('team_id', teamId)
+  for (const member of (members || [])) {
+    const { data: otherTeam } = await supabase
+      .from('team_members')
+      .select('team_id, role')
+      .eq('user_id', member.user_id)
+      .neq('team_id', teamId)
+      .limit(1)
+      .single()
 
-  for (const userId of memberIds) {
-    const otherTeam = await db.collection('team_members').findOne({ user_id: userId, team_id: { $ne: teamId } })
     if (otherTeam) {
-      await db.collection('profiles').updateOne(
-        { user_id: userId },
-        { $set: { team_id: otherTeam.team_id, role: otherTeam.role, updated_at: new Date() } }
-      )
+      await supabase.from('profiles').update({ team_id: otherTeam.team_id, role: otherTeam.role, updated_at: new Date().toISOString() }).eq('id', member.user_id)
     } else {
-      await db.collection('profiles').updateOne(
-        { user_id: userId },
-        { $set: { team_id: null, role: 'EMPLOYEE', updated_at: new Date() } }
-      )
+      await supabase.from('profiles').update({ team_id: null, role: 'EMPLOYEE', updated_at: new Date().toISOString() }).eq('id', member.user_id)
     }
   }
 
-  await db.collection('team_members').deleteMany({ team_id: teamId })
-  await db.collection('invitations').deleteMany({ team_id: teamId })
-  await db.collection('notifications').deleteMany({ team_id: teamId })
-  await db.collection('roles').deleteMany({ team_id: teamId })
+  await supabase.from('team_members').delete().eq('team_id', teamId)
+  await supabase.from('invitations').delete().eq('team_id', teamId)
+  await supabase.from('roles').delete().eq('team_id', teamId)
 
-  await db.collection('teams').deleteOne({ _id: new ObjectId(teamId) })
+  await supabase.from('Team').delete().eq('id', teamId)
 
-  const nextMember = await db.collection('team_members').findOne({ user_id: session.userId })
+  const { data: nextMember } = await supabase
+    .from('team_members')
+    .select('team_id, role')
+    .eq('user_id', session.userId)
+    .limit(1)
+    .single()
+
   if (nextMember) {
-    await db.collection('profiles').updateOne(
-      { user_id: session.userId },
-      { $set: { team_id: nextMember.team_id, role: nextMember.role, updated_at: new Date() } }
-    )
+    await supabase.from('profiles').update({ team_id: nextMember.team_id, role: nextMember.role, updated_at: new Date().toISOString() }).eq('id', session.userId)
     return { success: true, nextTeamId: nextMember.team_id }
   }
 

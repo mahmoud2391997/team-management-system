@@ -42,7 +42,7 @@ export default function RolesPage() {
     setLoading(true)
     const profile = await getProfile()
     if (profile) {
-      setCurrentUser({ id: profile.user_id, role: profile.role })
+      setCurrentUser({ id: profile.id, role: profile.role })
       if (profile.team_id) {
         const { data: profilesData } = await getProfiles()
         setProfiles(profilesData || [])

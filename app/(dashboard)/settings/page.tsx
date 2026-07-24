@@ -39,7 +39,7 @@ export default function SettingsPage() {
     setLoading(false)
   }
 
-  const isOwner = currentUser && team && currentUser.user_id === team.owner_id
+  const isOwner = currentUser && team && currentUser.id === team.owner_id
 
   const [deleteError, setDeleteError] = useState<string | null>(null)
 

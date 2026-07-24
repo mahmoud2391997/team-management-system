@@ -1,5 +1,5 @@
 import { getProfile, getCurrentUser } from '@/lib/auth'
-import { connectToDatabase } from '@/lib/mongodb'
+import { getSupabase } from '@/lib/supabase'
 import { redirect } from 'next/navigation'
 import { Sidebar } from '@/components/dashboard/sidebar'
 import { DEFAULT_ROLES, type Permission } from '@/lib/permissions'
@@ -19,16 +19,70 @@ export default async function DashboardLayout({
 
   let profile = user.profile
 
+  if (!profile) {
+    const supabase = getSupabase()
+
+    const { data: membership } = await supabase
+      .from('team_members')
+      .select('team_id, role')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const { error: insertErr } = await supabase
+      .from('profiles')
+      .insert({
+        id: user.id,
+        user_id: user.id,
+        email: user.email,
+        role: membership?.role || 'EMPLOYEE',
+        team_id: membership?.team_id || null,
+      })
+
+    if (!insertErr) {
+      profile = {
+        id: user.id,
+        email: user.email,
+        first_name: null,
+        last_name: null,
+        role: membership?.role || 'EMPLOYEE',
+        team_id: membership?.team_id || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+    }
+  } else if (!profile.team_id) {
+    const supabase = getSupabase()
+    const { data: activeMembership } = await supabase
+      .from('team_members')
+      .select('team_id, role')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (activeMembership) {
+      await supabase
+        .from('profiles')
+        .update({ team_id: activeMembership.team_id, role: activeMembership.role || profile.role, updated_at: new Date().toISOString() })
+        .eq('id', user.id)
+      profile = { ...profile, team_id: activeMembership.team_id, role: activeMembership.role || profile.role }
+    }
+  }
+
   let permissions: Permission[] = []
   if (profile?.team_id) {
-    const { db } = await connectToDatabase()
+    const supabase = getSupabase()
     if (DEFAULT_ROLES[profile.role]) {
       permissions = DEFAULT_ROLES[profile.role].permissions
     } else {
-      const customRole = await db.collection('roles').findOne({
-        team_id: profile.team_id,
-        name: profile.role,
-      })
+      const { data: customRole } = await supabase
+        .from('roles')
+        .select('permissions')
+        .eq('team_id', profile.team_id)
+        .eq('name', profile.role)
+        .single()
       permissions = customRole?.permissions || []
     }
   }

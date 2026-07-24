@@ -1,34 +1,47 @@
 'use server'
 
-import { connectToDatabase } from '@/lib/mongodb'
+import { getSupabase } from '@/lib/supabase'
 import { hashPassword } from '@/lib/auth'
 
 export async function signUpInvited(email: string, password: string) {
-  const { db } = await connectToDatabase()
+  const supabase = getSupabase()
 
-  const existing = await db.collection('users').findOne({ email: email.toLowerCase().trim() })
+  const { data: existing } = await supabase
+    .from('users')
+    .select('id')
+    .eq('email', email.toLowerCase().trim())
+    .single()
+
   if (existing) {
     return { error: 'An account with this email already exists' }
   }
 
   const passwordHash = await hashPassword(password)
 
-  const result = await db.collection('users').insertOne({
-    email: email.toLowerCase().trim(),
-    password_hash: passwordHash,
-    created_at: new Date(),
-  })
+  const { data: newUser, error: userError } = await supabase
+    .from('users')
+    .insert({
+      email: email.toLowerCase().trim(),
+      password_hash: passwordHash,
+    })
+    .select('id')
+    .single()
 
-  await db.collection('profiles').insertOne({
-    user_id: result.insertedId.toString(),
-    email: email.toLowerCase().trim(),
-    first_name: null,
-    last_name: null,
-    role: 'EMPLOYEE',
-    team_id: null,
-    created_at: new Date(),
-    updated_at: new Date(),
-  })
+  if (userError || !newUser) {
+    return { error: 'Failed to create account' }
+  }
 
-  return { success: true, userId: result.insertedId.toString() }
+  await supabase
+    .from('profiles')
+    .insert({
+      id: newUser.id,
+      user_id: newUser.id,
+      email: email.toLowerCase().trim(),
+      first_name: null,
+      last_name: null,
+      role: 'EMPLOYEE',
+      team_id: null,
+    })
+
+  return { success: true, userId: newUser.id }
 }

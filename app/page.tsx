@@ -1,5 +1,4 @@
 import { getCurrentUser } from '@/lib/auth'
-import { connectToDatabase } from '@/lib/mongodb'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Users, Briefcase, CheckSquare, Shield, ArrowRight } from 'lucide-react'

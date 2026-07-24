@@ -1,6 +1,5 @@
 import { Suspense } from 'react'
 import { getTasks, getDepartments } from '@/lib/actions/data-actions'
-import { Button } from '@/components/ui/button'
 import TasksContainer from '@/components/dashboard/tasks-container'
 import { KanbanSkeleton } from '@/components/ui/skeleton'
 import { isError } from '@/lib/utils/async-helpers'
@@ -30,12 +29,9 @@ async function TasksContent() {
 export default function TasksPage() {
   return (
     <div className="p-8 space-y-8">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Tasks</h1>
-          <p className="text-muted-foreground mt-2">Manage and track team tasks</p>
-        </div>
-        <Button>+ Add Task</Button>
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">Tasks</h1>
+        <p className="text-muted-foreground mt-2">Manage and track team tasks</p>
       </div>
 
       <Suspense fallback={<KanbanSkeleton />}>

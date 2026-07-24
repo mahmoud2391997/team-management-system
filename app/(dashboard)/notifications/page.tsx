@@ -1,15 +1,19 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getNotifications, acceptTeamInvitation, markNotificationRead } from '@/app/actions/invitations'
+import { useRouter } from 'next/navigation'
+import { getNotifications, acceptTeamInvitation, declineTeamInvitation, markAllNotificationsRead } from '@/app/actions/invitations'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Bell, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function NotificationsPage() {
+  const router = useRouter()
   const [notifications, setNotifications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [actionId, setActionId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     loadNotifications()
@@ -21,18 +25,8 @@ export default function NotificationsPage() {
     if (result.success) {
       setNotifications(result.data || [])
     }
+    await markAllNotificationsRead()
     setLoading(false)
-  }
-
-  const handleAccept = async (notificationId: string) => {
-    await acceptTeamInvitation(notificationId)
-    await loadNotifications()
-    window.location.reload()
-  }
-
-  const handleDecline = async (notificationId: string) => {
-    await markNotificationRead(notificationId)
-    await loadNotifications()
   }
 
   const unreadCount = notifications.filter(n => !n.read).length
@@ -54,6 +48,12 @@ export default function NotificationsPage() {
         </p>
       </div>
 
+      {error && (
+        <Card className="p-4 border border-destructive/50 bg-destructive/5">
+          <p className="text-sm text-destructive">{error}</p>
+        </Card>
+      )}
+
       {notifications.length === 0 ? (
         <Card className="p-12 text-center border border-border bg-card">
           <Bell className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -63,7 +63,7 @@ export default function NotificationsPage() {
         <div className="space-y-3">
           {notifications.map((notif) => (
             <Card
-              key={notif._id}
+              key={notif.id}
               className={cn(
                 'border',
                 notif.read ? 'bg-card' : 'bg-primary/5 border-primary/20'
@@ -82,15 +82,49 @@ export default function NotificationsPage() {
                     <div className="w-2 h-2 rounded-full bg-primary shrink-0 mt-2" />
                   )}
                 </div>
-                {notif.type === 'team_invitation' && !notif.read && (
+                {notif.type === 'team_invitation' && (
                   <div className="flex gap-2 mt-3">
-                    <Button size="sm" onClick={() => handleAccept(notif._id)}>
-                      <Check className="h-4 w-4 mr-1" />
-                      Accept
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => handleDecline(notif._id)}>
-                      Decline
-                    </Button>
+                    <form action={async () => {
+                      setActionId(notif.id)
+                      setError(null)
+                      const result = await acceptTeamInvitation(notif.id)
+                      if (result?.error) {
+                        setError(result.error)
+                        setActionId(null)
+                      } else {
+                        window.location.href = '/dashboard'
+                      }
+                    }}>
+                      <Button
+                        size="sm"
+                        type="submit"
+                        disabled={actionId === notif.id}
+                      >
+                        <Check className="h-4 w-4 mr-1" />
+                        {actionId === notif.id ? 'Accepting...' : 'Accept'}
+                      </Button>
+                    </form>
+                    <form action={async () => {
+                      setActionId(notif.id)
+                      setError(null)
+                      const result = await declineTeamInvitation(notif.id)
+                      if (result?.error) {
+                        setError(result.error)
+                        setActionId(null)
+                      } else {
+                        setNotifications(prev => prev.filter(n => n.id !== notif.id))
+                        setActionId(null)
+                      }
+                    }}>
+                      <Button
+                        size="sm"
+                        type="submit"
+                        variant="outline"
+                        disabled={actionId === notif.id}
+                      >
+                        {actionId === notif.id ? 'Declining...' : 'Decline'}
+                      </Button>
+                    </form>
                   </div>
                 )}
               </CardContent>

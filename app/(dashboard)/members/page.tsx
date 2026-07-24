@@ -71,7 +71,7 @@ export default function MembersPage() {
       return
     }
 
-    setSuccess(`Invitation sent to ${inviteEmail}`)
+    setSuccess(result.message || `Invitation sent to ${inviteEmail}`)
     setInviteEmail('')
     setInviteRole('EMPLOYEE')
     await refreshPermissions()
@@ -231,8 +231,8 @@ export default function MembersPage() {
           <div className="space-y-3">
             {teamMembers.map((member) => {
               const isMemberAdmin = member.role === 'ADMIN'
-              const isMemberOwner = member.user_id === team?.owner_id
-              const isCurrentUser = member.user_id === currentUser?.user_id
+              const isMemberOwner = member.id === team?.owner_id
+              const isCurrentUser = member.id === currentUser?.id
               const isLastAdmin = isMemberAdmin && adminCount === 1
               const isLocked = isLastAdmin
 
@@ -262,18 +262,18 @@ export default function MembersPage() {
                     {canManageMembers && !isLocked && (
                       <>
                         {currentUser?.role === 'ADMIN' && !isMemberAdmin && (
-                          <Button variant="outline" size="sm" onClick={() => setShowPromoteConfirm(member.user_id)}>
+                          <Button variant="outline" size="sm" onClick={() => setShowPromoteConfirm(member.id)}>
                             <UserPlus className="h-4 w-4 mr-1" />
                             Make Admin
                           </Button>
                         )}
                         {currentUser?.role === 'ADMIN' && isMemberAdmin && adminCount > 1 && (
-                          <Button variant="outline" size="sm" onClick={() => { setDemoteRole('MANAGER'); setShowDemoteConfirm(member.user_id) }}>
+                          <Button variant="outline" size="sm" onClick={() => { setDemoteRole('MANAGER'); setShowDemoteConfirm(member.id) }}>
                             Remove Admin
                           </Button>
                         )}
                         {!isLastAdmin && (!isMemberOwner || adminCount > 1) && (
-                          <Button variant="outline" size="sm" onClick={() => handleRemoveFromTeam(member.user_id)} className="text-destructive hover:text-destructive">
+                          <Button variant="outline" size="sm" onClick={() => handleRemoveFromTeam(member.id)} className="text-destructive hover:text-destructive">
                             Remove
                           </Button>
                         )}
@@ -284,7 +284,7 @@ export default function MembersPage() {
                     )}
                   </div>
 
-                  {showPromoteConfirm === member.user_id && (
+                  {showPromoteConfirm === member.id && (
                     <div className="fixed inset-0 bg-background/80 flex items-center justify-center z-50">
                       <Card className="w-96">
                         <CardHeader>
@@ -294,7 +294,7 @@ export default function MembersPage() {
                         <CardContent>
                           <p className="text-sm text-muted-foreground mb-4">Admins can manage team members, departments, and settings.</p>
                           <div className="flex gap-2">
-                            <Button size="sm" onClick={() => handlePromoteToAdmin(member.user_id)} disabled={actionLoading}>
+                            <Button size="sm" onClick={() => handlePromoteToAdmin(member.id)} disabled={actionLoading}>
                               {actionLoading ? 'Promoting...' : 'Yes, Promote'}
                             </Button>
                             <Button variant="outline" size="sm" onClick={() => setShowPromoteConfirm(null)}>Cancel</Button>
@@ -304,7 +304,7 @@ export default function MembersPage() {
                     </div>
                   )}
 
-                  {showDemoteConfirm === member.user_id && (
+                  {showDemoteConfirm === member.id && (
                     <div className="fixed inset-0 bg-background/80 flex items-center justify-center z-50">
                       <Card className="w-96">
                         <CardHeader>
@@ -322,7 +322,7 @@ export default function MembersPage() {
                             ))}
                           </select>
                           <div className="flex gap-2">
-                            <Button size="sm" onClick={() => handleRemoveAdmin(member.user_id, demoteRole)} disabled={actionLoading}>
+                            <Button size="sm" onClick={() => handleRemoveAdmin(member.id, demoteRole)} disabled={actionLoading}>
                               {actionLoading ? 'Updating...' : 'Confirm'}
                             </Button>
                             <Button variant="outline" size="sm" onClick={() => setShowDemoteConfirm(null)}>Cancel</Button>
