@@ -72,6 +72,30 @@ export async function getSessionFromCookies(): Promise<JWTPayload | null> {
   return verifyToken(token)
 }
 
+export async function getProfileForUser(userId: string, email?: string | null): Promise<UserProfile | null> {
+  const supabase = getSupabase()
+
+  const { data: byId } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (byId) return byId
+
+  if (email) {
+    const { data: byEmail } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('email', email.toLowerCase().trim())
+      .maybeSingle()
+
+    if (byEmail) return byEmail
+  }
+
+  return null
+}
+
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   const session = await getSessionFromCookies()
   if (!session) return null
@@ -86,16 +110,12 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 
   if (!user) return null
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', session.userId)
-    .single()
+  const profile = await getProfileForUser(user.id, user.email)
 
   return {
     id: user.id,
     email: user.email,
-    profile: profile || null,
+    profile,
   }
 }
 
@@ -103,15 +123,7 @@ export async function getProfile(): Promise<UserProfile | null> {
   const session = await getSessionFromCookies()
   if (!session) return null
 
-  const supabase = getSupabase()
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', session.userId)
-    .single()
-
-  return profile || null
+  return getProfileForUser(session.userId, session.email)
 }
 
 export async function getRequiredUser() {

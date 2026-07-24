@@ -38,7 +38,8 @@ export default function NotificationsPage() {
         setError(result.error)
         setActionId(null)
       } else {
-        window.location.href = '/dashboard'
+        router.push('/dashboard')
+        router.refresh()
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to accept invitation')

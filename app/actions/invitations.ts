@@ -1,22 +1,17 @@
 'use server'
 
 import { getSupabase } from '@/lib/supabase'
-import { getSessionFromCookies } from '@/lib/auth'
+import { getSessionFromCookies, getProfileForUser } from '@/lib/auth'
 import { DEFAULT_ROLES, type Permission } from '@/lib/permissions'
 
 async function checkPermission(permission: Permission): Promise<{ allowed: boolean; profile?: any }> {
   const session = await getSessionFromCookies()
   if (!session) return { allowed: false }
 
-  const supabase = getSupabase()
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', session.userId)
-    .single()
-
+  const profile = await getProfileForUser(session.userId, session.email)
   if (!profile) return { allowed: false }
 
+  const supabase = getSupabase()
   const roleName = profile.role
   let perms: Permission[] = []
 
@@ -266,64 +261,56 @@ export async function acceptTeamInvitation(notificationId: string) {
     .eq('user_id', session.userId)
     .single()
 
-  console.log('Accept invitation - notification:', notification, 'error:', notifError)
-
   if (notifError || !notification) return { error: 'Notification not found' }
 
   const data = typeof notification.data === 'string'
     ? JSON.parse(notification.data)
     : notification.data
 
-  console.log('Accept invitation - data:', data)
-
   if (!data) return { error: 'Invalid notification data' }
 
   const { invitation_id, team_id, role } = data
-
-  console.log('Accept invitation - team_id:', team_id, 'role:', role, 'invitation_id:', invitation_id)
+  const memberRole = role || 'EMPLOYEE'
 
   if (!team_id) return { error: 'No team associated with this invitation' }
 
-  const { data: existingMember } = await supabase
+  const { data: existingMembers } = await supabase
     .from('team_members')
     .select('id')
     .eq('user_id', session.userId)
     .eq('team_id', team_id)
-    .single()
+    .limit(1)
 
-  console.log('Accept invitation - existingMember:', existingMember)
+  const existingMember = existingMembers?.[0] ?? null
 
   if (existingMember) {
     await supabase
       .from('team_members')
-      .update({ role: role || 'EMPLOYEE', is_active: true, updated_at: new Date().toISOString() })
+      .update({ role: memberRole, is_active: true, updated_at: new Date().toISOString() })
       .eq('id', existingMember.id)
   } else {
-    const { data: insertResult, error: memberError } = await supabase
+    const { error: memberError } = await supabase
       .from('team_members')
       .insert({
         user_id: session.userId,
         team_id,
-        role: role || 'EMPLOYEE',
+        role: memberRole,
         is_active: true,
       })
-      .select()
-
-    console.log('Accept invitation - insert result:', insertResult, 'error:', memberError)
 
     if (memberError) return { error: `Failed to join team: ${memberError.message}` }
   }
 
-  const { error: profileError } = await supabase
-    .from('profiles')
-    .update({ team_id, role: role || 'EMPLOYEE', updated_at: new Date().toISOString() })
-    .eq('id', session.userId)
+  const existingProfile = await getProfileForUser(session.userId, session.email)
 
-  console.log('Accept invitation - profile update error:', profileError)
+  if (existingProfile) {
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ team_id, role: memberRole, updated_at: new Date().toISOString() })
+      .eq('id', existingProfile.id)
 
-  // If profile doesn't exist, create it
-  if (profileError) {
-    console.log('Profile update failed, trying to create profile')
+    if (profileError) return { error: `Failed to update profile: ${profileError.message}` }
+  } else {
     const { data: userData } = await supabase
       .from('users')
       .select('email')
@@ -336,14 +323,12 @@ export async function acceptTeamInvitation(notificationId: string) {
         id: session.userId,
         email: userData?.email || session.email,
         team_id,
-        role: role || 'EMPLOYEE',
+        role: memberRole,
         first_name: null,
         last_name: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
-
-    console.log('Accept invitation - profile create error:', createError)
 
     if (createError) return { error: `Failed to create profile: ${createError.message}` }
   }
@@ -355,10 +340,7 @@ export async function acceptTeamInvitation(notificationId: string) {
       .eq('id', invitation_id)
   }
 
-  await supabase
-    .from('notifications')
-    .update({ read: true, updated_at: new Date().toISOString() })
-    .eq('id', notificationId)
+  await supabase.from('notifications').delete().eq('id', notificationId)
 
   return { success: true }
 }
@@ -418,7 +400,7 @@ export async function getUserTeams() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('team_id')
+    .select('team_id, role')
     .eq('id', session.userId)
     .single()
 
@@ -430,6 +412,17 @@ export async function getUserTeams() {
     .eq('user_id', session.userId)
 
   const teamIds = [...new Set((memberTeams || []).map(m => m.team_id))]
+
+  if (activeTeamId && !teamIds.includes(activeTeamId)) {
+    teamIds.push(activeTeamId)
+
+    await supabase.from('team_members').insert({
+      user_id: session.userId,
+      team_id: activeTeamId,
+      role: profile?.role || 'EMPLOYEE',
+      is_active: true,
+    }).then(() => {}).catch(() => {})
+  }
 
   if (teamIds.length === 0) return { success: true, data: [], activeTeamId: null }
 

@@ -35,7 +35,6 @@ export async function signUpInvited(email: string, password: string) {
     .from('profiles')
     .insert({
       id: newUser.id,
-      user_id: newUser.id,
       email: email.toLowerCase().trim(),
       first_name: null,
       last_name: null,

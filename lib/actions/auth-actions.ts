@@ -1,7 +1,7 @@
 'use server'
 
 import { getSupabase } from '@/lib/supabase'
-import { hashPassword, setSessionCookie, removeSessionCookie, getSessionFromCookies } from '@/lib/auth'
+import { hashPassword, setSessionCookie, removeSessionCookie, getSessionFromCookies, getProfileForUser } from '@/lib/auth'
 
 export async function login(email: string, password: string) {
   const supabase = getSupabase()
@@ -54,7 +54,6 @@ export async function signUp(email: string, password: string, firstName?: string
 
   await supabase.from('profiles').insert({
     id: newUser.id,
-    user_id: newUser.id,
     email: email.toLowerCase().trim(),
     first_name: firstName || null,
     last_name: lastName || null,
@@ -86,11 +85,7 @@ export async function getUserInfo() {
 
   if (!user) return null
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', session.userId)
-    .single()
+  const profile = await getProfileForUser(session.userId, session.email)
 
   return {
     id: user.id,

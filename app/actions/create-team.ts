@@ -35,7 +35,6 @@ export async function createTeamWithAccount(teamName: string, email: string, pas
 
     await supabase.from('profiles').insert({
       id: userId,
-      user_id: userId,
       email: email.toLowerCase().trim(),
       first_name: null,
       last_name: null,
