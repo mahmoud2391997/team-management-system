@@ -4,6 +4,8 @@ import { connectToDatabase } from '@/lib/mongodb'
 import { getSessionFromCookies } from '@/lib/auth'
 import { ObjectId } from 'mongodb'
 import { DEFAULT_ROLES, type Permission } from '@/lib/permissions'
+import type { ActionResult, Employee, Department, Task, DashboardStats, Profile, Team } from '@/lib/types'
+import { createSuccess, createError } from '@/lib/utils/async-helpers'
 
 export async function getUserPermissions(): Promise<Permission[]> {
   const session = await getSessionFromCookies()
@@ -111,137 +113,182 @@ export async function getTeamId() {
   return profile?.team_id || null
 }
 
-export async function getDashboardStats() {
-  const session = await getSessionFromCookies()
-  if (!session) return { employees: 0, tasks: 0, departments: 0, completedTasks: 0 }
-
-  const { db } = await connectToDatabase()
-  const profile = await db.collection('profiles').findOne({ user_id: session.userId })
-  if (!profile?.team_id) return { employees: 0, tasks: 0, departments: 0, completedTasks: 0 }
-
-  const teamId = profile.team_id
-
-  const [employeeCount, taskCount, departmentCount, completedCount] = await Promise.all([
-    db.collection('employees').countDocuments({ team_id: teamId }),
-    db.collection('tasks').countDocuments({ team_id: teamId }),
-    db.collection('departments').countDocuments({ team_id: teamId }),
-    db.collection('tasks').countDocuments({ team_id: teamId, status: 'COMPLETED' }),
-  ])
-
-  return { employees: employeeCount, tasks: taskCount, departments: departmentCount, completedTasks: completedCount }
-}
-
-export async function getEmployees() {
-  const session = await getSessionFromCookies()
-  if (!session) return []
-
-  const { db } = await connectToDatabase()
-  const profile = await db.collection('profiles').findOne({ user_id: session.userId })
-  if (!profile?.team_id) return []
-
-  const employees = await db.collection('employees')
-    .find({ team_id: profile.team_id })
-    .sort({ created_at: -1 })
-    .toArray()
-
-  const enriched = await Promise.all(employees.map(async (emp) => {
-    const empProfile = await db.collection('profiles').findOne({ user_id: emp.profile_id })
-    const department = emp.department_id ? await db.collection('departments').findOne({ _id: new ObjectId(emp.department_id) }) : null
-    const manager = emp.manager_id ? await db.collection('profiles').findOne({ user_id: emp.manager_id }) : null
-
-    return {
-      ...emp,
-      _id: emp._id.toString(),
-      id: emp._id.toString(),
-      profile: empProfile ? { id: empProfile.user_id, first_name: empProfile.first_name, last_name: empProfile.last_name, email: empProfile.email, role: empProfile.role } : null,
-      department: department ? { id: department._id.toString(), name: department.name } : null,
-      manager: manager ? { id: manager.user_id, first_name: manager.first_name, last_name: manager.last_name } : null,
+export async function getDashboardStats(): Promise<ActionResult<DashboardStats>> {
+  try {
+    const session = await getSessionFromCookies()
+    if (!session) {
+      return createSuccess({ employees: 0, tasks: 0, departments: 0, completedTasks: 0 })
     }
-  }))
 
-  return enriched
-}
-
-export async function getDepartments() {
-  const session = await getSessionFromCookies()
-  if (!session) return []
-
-  const { db } = await connectToDatabase()
-  const profile = await db.collection('profiles').findOne({ user_id: session.userId })
-  if (!profile?.team_id) return []
-
-  const departments = await db.collection('departments')
-    .find({ team_id: profile.team_id })
-    .sort({ created_at: -1 })
-    .toArray()
-
-  const enriched = await Promise.all(departments.map(async (dept) => {
-    const manager = dept.manager_id ? await db.collection('profiles').findOne({ user_id: dept.manager_id }) : null
-    return {
-      ...dept,
-      _id: dept._id.toString(),
-      id: dept._id.toString(),
-      manager: manager ? { id: manager.user_id, first_name: manager.first_name, last_name: manager.last_name } : null,
+    const { db } = await connectToDatabase()
+    const profile = await db.collection('profiles').findOne({ user_id: session.userId })
+    if (!profile?.team_id) {
+      return createSuccess({ employees: 0, tasks: 0, departments: 0, completedTasks: 0 })
     }
-  }))
 
-  return enriched
+    const teamId = profile.team_id
+
+    const [employeeCount, taskCount, departmentCount, completedCount] = await Promise.all([
+      db.collection('employees').countDocuments({ team_id: teamId }),
+      db.collection('tasks').countDocuments({ team_id: teamId }),
+      db.collection('departments').countDocuments({ team_id: teamId }),
+      db.collection('tasks').countDocuments({ team_id: teamId, status: 'COMPLETED' }),
+    ])
+
+    return createSuccess({
+      employees: employeeCount,
+      tasks: taskCount,
+      departments: departmentCount,
+      completedTasks: completedCount,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch dashboard stats'
+    return createError(message)
+  }
 }
 
-export async function getTasks(filterDept?: string) {
-  const session = await getSessionFromCookies()
-  if (!session) return []
+export async function getEmployees(): Promise<ActionResult<Employee[]>> {
+  try {
+    const session = await getSessionFromCookies()
+    if (!session) return createSuccess([])
 
-  const { db } = await connectToDatabase()
-  const profile = await db.collection('profiles').findOne({ user_id: session.userId })
-  if (!profile?.team_id) return []
+    const { db } = await connectToDatabase()
+    const profile = await db.collection('profiles').findOne({ user_id: session.userId })
+    if (!profile?.team_id) return createSuccess([])
 
-  const query: any = { team_id: profile.team_id }
-  if (filterDept) query.department_id = filterDept
+    const employees = await db.collection('employees')
+      .find({ team_id: profile.team_id })
+      .sort({ created_at: -1 })
+      .toArray()
 
-  const tasks = await db.collection('tasks')
-    .find(query)
-    .sort({ created_at: -1 })
-    .toArray()
+    const enriched = await Promise.all(employees.map(async (emp) => {
+      const empProfile = await db.collection('profiles').findOne({ user_id: emp.profile_id })
+      const department = emp.department_id ? await db.collection('departments').findOne({ _id: new ObjectId(emp.department_id) }) : null
+      const manager = emp.manager_id ? await db.collection('profiles').findOne({ user_id: emp.manager_id }) : null
 
-  const enriched = await Promise.all(tasks.map(async (task) => {
-    const department = task.department_id ? await db.collection('departments').findOne({ _id: new ObjectId(task.department_id) }) : null
-    const assignee = task.assignee_id ? await db.collection('profiles').findOne({ user_id: task.assignee_id }) : null
-    return {
-      ...task,
-      _id: task._id.toString(),
-      id: task._id.toString(),
-      department: department ? { id: department._id.toString(), name: department.name } : null,
-      assignee: assignee ? { id: assignee.user_id, first_name: assignee.first_name, last_name: assignee.last_name, email: assignee.email } : null,
+      return {
+        ...emp,
+        _id: emp._id.toString(),
+        id: emp._id.toString(),
+        profile: empProfile ? { id: empProfile.user_id, first_name: empProfile.first_name, last_name: empProfile.last_name, email: empProfile.email, role: empProfile.role } : null,
+        department: department ? { id: department._id.toString(), name: department.name } : null,
+        manager: manager ? { id: manager.user_id, first_name: manager.first_name, last_name: manager.last_name } : null,
+      }
+    }))
+
+    return createSuccess(enriched as any as Employee[])
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch employees'
+    return createError(message)
+  }
+}
+
+export async function getDepartments(): Promise<ActionResult<Department[]>> {
+  try {
+    const session = await getSessionFromCookies()
+    if (!session) return createSuccess([])
+
+    const { db } = await connectToDatabase()
+    const profile = await db.collection('profiles').findOne({ user_id: session.userId })
+    if (!profile?.team_id) return createSuccess([])
+
+    const departments = await db.collection('departments')
+      .find({ team_id: profile.team_id })
+      .sort({ created_at: -1 })
+      .toArray()
+
+    const enriched = await Promise.all(departments.map(async (dept) => {
+      const manager = dept.manager_id ? await db.collection('profiles').findOne({ user_id: dept.manager_id }) : null
+      return {
+        ...dept,
+        _id: dept._id.toString(),
+        id: dept._id.toString(),
+        manager: manager ? { id: manager.user_id, first_name: manager.first_name, last_name: manager.last_name } : null,
+      }
+    }))
+
+    return createSuccess(enriched as any as Department[])
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch departments'
+    return createError(message)
+  }
+}
+
+export async function getTasks(filterDept?: string): Promise<ActionResult<Task[]>> {
+  try {
+    const session = await getSessionFromCookies()
+    if (!session) return createSuccess([])
+
+    const { db } = await connectToDatabase()
+    const profile = await db.collection('profiles').findOne({ user_id: session.userId })
+    if (!profile?.team_id) return createSuccess([])
+
+    const query: any = { team_id: profile.team_id }
+    if (filterDept) query.department_id = filterDept
+
+    const tasks = await db.collection('tasks')
+      .find(query)
+      .sort({ created_at: -1 })
+      .toArray()
+
+    const enriched = await Promise.all(tasks.map(async (task) => {
+      const department = task.department_id ? await db.collection('departments').findOne({ _id: new ObjectId(task.department_id) }) : null
+      const assignee = task.assignee_id ? await db.collection('profiles').findOne({ user_id: task.assignee_id }) : null
+      return {
+        ...task,
+        _id: task._id.toString(),
+        id: task._id.toString(),
+        department: department ? { id: department._id.toString(), name: department.name } : null,
+        assignee: assignee ? { id: assignee.user_id, first_name: assignee.first_name, last_name: assignee.last_name, email: assignee.email } : null,
+      }
+    }))
+
+    return createSuccess(enriched as any as Task[])
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch tasks'
+    return createError(message)
+  }
+}
+
+export async function getProfiles(): Promise<ActionResult<Record<string, any>[]>> {
+  try {
+    const session = await getSessionFromCookies()
+    if (!session) return createSuccess([])
+
+    const { db } = await connectToDatabase()
+    const profile = await db.collection('profiles').findOne({ user_id: session.userId })
+    if (!profile?.team_id) return createSuccess([])
+
+    const profiles = await db.collection('profiles')
+      .find({ team_id: profile.team_id })
+      .sort({ created_at: -1 })
+      .toArray()
+
+    const result = profiles.map(p => ({
+      ...p,
+      _id: p._id.toString(),
+      id: p.user_id,
+    }))
+
+    return createSuccess(result)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch profiles'
+    return createError(message)
+  }
+}
+
+export async function getManagerProfiles(): Promise<ActionResult<Record<string, any>[]>> {
+  try {
+    const result = await getProfiles()
+    if (isError(result)) {
+      return result
     }
-  }))
-
-  return enriched
-}
-
-export async function getProfiles() {
-  const session = await getSessionFromCookies()
-  if (!session) return []
-
-  const { db } = await connectToDatabase()
-  const profile = await db.collection('profiles').findOne({ user_id: session.userId })
-  if (!profile?.team_id) return []
-
-  const profiles = await db.collection('profiles')
-    .find({ team_id: profile.team_id })
-    .sort({ created_at: -1 })
-    .toArray()
-
-  return profiles.map(p => ({
-    ...p,
-    _id: p._id.toString(),
-    id: p.user_id,
-  }))
-}
-
-export async function getManagerProfiles(): Promise<Record<string, any>[]> {
-  const profiles = await getProfiles()
-  return profiles.filter((p: Record<string, any>) => p.role === 'MANAGER' || p.role === 'ADMIN')
+    const filtered = result.data.filter((p: Record<string, any>) => p.role === 'MANAGER' || p.role === 'ADMIN')
+    return createSuccess(filtered)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch manager profiles'
+    return createError(message)
+  }
 }
 
 export async function getAllProfiles() {
@@ -298,115 +345,160 @@ export async function getTeam() {
   }
 }
 
-export async function createEmployee(data: any) {
-  const auth = await requirePermission('employees.create')
-  if (!auth.ok) return { error: auth.error }
+export async function createEmployee(data: any): Promise<ActionResult<{ id: string }>> {
+  try {
+    const auth = await requirePermission('employees.create')
+    if (!auth.ok) return createError(auth.error)
 
-  const { db } = await connectToDatabase()
+    const { db } = await connectToDatabase()
 
-  await db.collection('employees').insertOne({
-    ...data,
-    team_id: auth.profile.team_id,
-    created_at: new Date(),
-    updated_at: new Date(),
-  })
+    const result = await db.collection('employees').insertOne({
+      ...data,
+      team_id: auth.profile.team_id,
+      created_at: new Date(),
+      updated_at: new Date(),
+    })
 
-  return { success: true }
+    return createSuccess({ id: result.insertedId.toString() })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create employee'
+    return createError(message)
+  }
 }
 
-export async function updateEmployee(id: string, data: any) {
-  const auth = await requirePermission('employees.edit')
-  if (!auth.ok) return { error: auth.error }
+export async function updateEmployee(id: string, data: any): Promise<ActionResult<{ id: string }>> {
+  try {
+    const auth = await requirePermission('employees.edit')
+    if (!auth.ok) return createError(auth.error)
 
-  const { db } = await connectToDatabase()
-  await db.collection('employees').updateOne(
-    { _id: new ObjectId(id) },
-    { $set: { ...data, updated_at: new Date() } }
-  )
-  return { success: true }
+    const { db } = await connectToDatabase()
+    await db.collection('employees').updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { ...data, updated_at: new Date() } }
+    )
+    return createSuccess({ id })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update employee'
+    return createError(message)
+  }
 }
 
-export async function deleteEmployee(id: string) {
-  const auth = await requirePermission('employees.delete')
-  if (!auth.ok) return { error: auth.error }
+export async function deleteEmployee(id: string): Promise<ActionResult<{ id: string }>> {
+  try {
+    const auth = await requirePermission('employees.delete')
+    if (!auth.ok) return createError(auth.error)
 
-  const { db } = await connectToDatabase()
-  await db.collection('employees').deleteOne({ _id: new ObjectId(id) })
-  return { success: true }
+    const { db } = await connectToDatabase()
+    await db.collection('employees').deleteOne({ _id: new ObjectId(id) })
+    return createSuccess({ id })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to delete employee'
+    return createError(message)
+  }
 }
 
-export async function createDepartment(data: any) {
-  const auth = await requirePermission('departments.create')
-  if (!auth.ok) return { error: auth.error }
+export async function createDepartment(data: any): Promise<ActionResult<{ id: string }>> {
+  try {
+    const auth = await requirePermission('departments.create')
+    if (!auth.ok) return createError(auth.error)
 
-  const { db } = await connectToDatabase()
+    const { db } = await connectToDatabase()
 
-  await db.collection('departments').insertOne({
-    ...data,
-    team_id: auth.profile.team_id,
-    created_at: new Date(),
-    updated_at: new Date(),
-  })
+    const result = await db.collection('departments').insertOne({
+      ...data,
+      team_id: auth.profile.team_id,
+      created_at: new Date(),
+      updated_at: new Date(),
+    })
 
-  return { success: true }
+    return createSuccess({ id: result.insertedId.toString() })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create department'
+    return createError(message)
+  }
 }
 
-export async function updateDepartment(id: string, data: any) {
-  const auth = await requirePermission('departments.edit')
-  if (!auth.ok) return { error: auth.error }
+export async function updateDepartment(id: string, data: any): Promise<ActionResult<{ id: string }>> {
+  try {
+    const auth = await requirePermission('departments.edit')
+    if (!auth.ok) return createError(auth.error)
 
-  const { db } = await connectToDatabase()
-  await db.collection('departments').updateOne(
-    { _id: new ObjectId(id) },
-    { $set: { ...data, updated_at: new Date() } }
-  )
-  return { success: true }
+    const { db } = await connectToDatabase()
+    await db.collection('departments').updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { ...data, updated_at: new Date() } }
+    )
+    return createSuccess({ id })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update department'
+    return createError(message)
+  }
 }
 
-export async function deleteDepartment(id: string) {
-  const auth = await requirePermission('departments.delete')
-  if (!auth.ok) return { error: auth.error }
+export async function deleteDepartment(id: string): Promise<ActionResult<{ id: string }>> {
+  try {
+    const auth = await requirePermission('departments.delete')
+    if (!auth.ok) return createError(auth.error)
 
-  const { db } = await connectToDatabase()
-  await db.collection('departments').deleteOne({ _id: new ObjectId(id) })
-  return { success: true }
+    const { db } = await connectToDatabase()
+    await db.collection('departments').deleteOne({ _id: new ObjectId(id) })
+    return createSuccess({ id })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to delete department'
+    return createError(message)
+  }
 }
 
-export async function createTask(data: any) {
-  const auth = await requirePermission('tasks.create')
-  if (!auth.ok) return { error: auth.error }
+export async function createTask(data: any): Promise<ActionResult<{ id: string }>> {
+  try {
+    const auth = await requirePermission('tasks.create')
+    if (!auth.ok) return createError(auth.error)
 
-  const { db } = await connectToDatabase()
+    const { db } = await connectToDatabase()
 
-  await db.collection('tasks').insertOne({
-    ...data,
-    team_id: auth.profile.team_id,
-    created_at: new Date(),
-    updated_at: new Date(),
-  })
+    const result = await db.collection('tasks').insertOne({
+      ...data,
+      team_id: auth.profile.team_id,
+      created_at: new Date(),
+      updated_at: new Date(),
+    })
 
-  return { success: true }
+    return createSuccess({ id: result.insertedId.toString() })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create task'
+    return createError(message)
+  }
 }
 
-export async function updateTask(id: string, data: any) {
-  const auth = await requirePermission('tasks.edit')
-  if (!auth.ok) return { error: auth.error }
+export async function updateTask(id: string, data: any): Promise<ActionResult<{ id: string }>> {
+  try {
+    const auth = await requirePermission('tasks.edit')
+    if (!auth.ok) return createError(auth.error)
 
-  const { db } = await connectToDatabase()
-  await db.collection('tasks').updateOne(
-    { _id: new ObjectId(id) },
-    { $set: { ...data, updated_at: new Date() } }
-  )
-  return { success: true }
+    const { db } = await connectToDatabase()
+    await db.collection('tasks').updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { ...data, updated_at: new Date() } }
+    )
+    return createSuccess({ id })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update task'
+    return createError(message)
+  }
 }
 
-export async function deleteTask(id: string) {
-  const auth = await requirePermission('tasks.delete')
-  if (!auth.ok) return { error: auth.error }
+export async function deleteTask(id: string): Promise<ActionResult<{ id: string }>> {
+  try {
+    const auth = await requirePermission('tasks.delete')
+    if (!auth.ok) return createError(auth.error)
 
-  const { db } = await connectToDatabase()
-  await db.collection('tasks').deleteOne({ _id: new ObjectId(id) })
-  return { success: true }
+    const { db } = await connectToDatabase()
+    await db.collection('tasks').deleteOne({ _id: new ObjectId(id) })
+    return createSuccess({ id })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to delete task'
+    return createError(message)
+  }
 }
 
 export async function removeFromTeam(memberId: string) {
