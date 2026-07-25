@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -144,17 +145,25 @@ export function Sidebar({ userRole }: { userRole?: string }) {
     >
       <div className="flex items-center justify-between p-4 border-b border-border">
         {!collapsed && (
-          <div className="flex-1 min-w-0">
-            <h2 className="font-bold text-lg truncate">TMS</h2>
-            {teamData.hasTeam && teamData.activeName && (
-              <button
-                onClick={() => setSwitcherOpen(!switcherOpen)}
-                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 truncate w-full text-left"
-              >
-                {teamData.activeName}
-                <ChevronsUpDown className="h-3 w-3 shrink-0" />
-              </button>
-            )}
+          <div className="flex-1 min-w-0 flex items-center gap-2">
+            <Image src="/image.png" alt="Team Management Platform" width={32} height={32} />
+            <div className="min-w-0">
+              <h2 className="font-bold text-lg truncate">TMS</h2>
+              {teamData.hasTeam && teamData.activeName && (
+                <button
+                  onClick={() => setSwitcherOpen(!switcherOpen)}
+                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 truncate w-full text-left"
+                >
+                  {teamData.activeName}
+                  <ChevronsUpDown className="h-3 w-3 shrink-0" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        {collapsed && (
+          <div className="flex items-center justify-center w-full">
+            <Image src="/image.png" alt="Team Management Platform" width={32} height={32} />
           </div>
         )}
         <Button variant="ghost" size="icon" onClick={() => setCollapsed(!collapsed)} className="outline shrink-0">

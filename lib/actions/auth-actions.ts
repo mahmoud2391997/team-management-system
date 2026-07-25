@@ -112,8 +112,22 @@ export async function updateProfile(firstName: string, lastName: string) {
       updated_at: new Date().toISOString(),
     })
     .eq('id', session.userId)
-
   if (error) return { error: error.message }
+
+  return { success: true }
+}
+
+export async function demoLogin() {
+  const supabase = getSupabase()
+  const { data: user } = await supabase
+    .from('users')
+    .select('id, email')
+    .eq('email', 'freelancing589@gmail.com')
+    .single()
+
+  if (!user) return { error: 'Demo account not found' }
+
+  await setSessionCookie({ userId: user.id, email: user.email })
   return { success: true }
 }
 

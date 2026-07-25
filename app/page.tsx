@@ -1,7 +1,9 @@
 import { getCurrentUser } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Users, Briefcase, CheckSquare, Shield, ArrowRight } from 'lucide-react'
+import DemoButton from '@/components/demo-button'
 
 export default async function HomePage() {
   const user = await getCurrentUser()
@@ -16,12 +18,13 @@ export default async function HomePage() {
     <div className="flex h-svh flex-col overflow-hidden">
       <header className="flex shrink-0 items-center justify-between border-b px-6 py-3 lg:px-12">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold">
-            T
+          <div className="flex h-8 w-8 items-center justify-center">
+            <Image src="/image.png" alt="Team Management Platform" width={32} height={32} />
           </div>
           <span className="text-lg font-semibold">TeamHub</span>
         </div>
         <div className="flex items-center gap-3">
+          <DemoButton />
           <Link
             href="/auth/login"
             className="inline-flex h-9 items-center justify-center rounded-md px-4 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
@@ -76,6 +79,7 @@ export default async function HomePage() {
           >
             Login
           </Link>
+          <DemoButton className="h-10 rounded-lg" />
         </div>
       </section>
 

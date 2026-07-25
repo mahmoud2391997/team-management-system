@@ -1,0 +1,27 @@
+<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    @media (prefers-color-scheme: light) {
+      .background { fill: white; }
+    }
+    @media (prefers-color-scheme: dark) {
+      .background { fill: #0a0a0a; }
+    }
+  </style>
+  <rect class="background" width="180" height="180" rx="37"/>
+  
+  <!-- Stylized T in blue -->
+  <path d="M85 45H95V75H115V85H95V115H85V85H65V75H85V45Z" fill="#3B82F6"/>
+  
+  <!-- Three abstract human figures in semi-circle -->
+  <!-- Purple figure (left) -->
+  <circle cx="55" cy="105" r="8" fill="#8B5CF6"/>
+  <path d="M45 125C45 118 50 115 55 115C60 115 65 118 65 125V130H45V125Z" fill="#8B5CF6"/>
+  
+  <!-- Blue figure (center) -->
+  <circle cx="90" cy="100" r="9" fill="#3B82F6"/>
+  <path d="M78 125C78 117 84 113 90 113C96 113 102 117 102 125V130H78V125Z" fill="#3B82F6"/>
+  
+  <!-- Teal figure (right) -->
+  <circle cx="125" cy="105" r="8" fill="#14B8A6"/>
+  <path d="M115 125C115 118 120 115 125 115C130 115 135 118 135 125V130H115V125Z" fill="#14B8A6"/>
+</svg>

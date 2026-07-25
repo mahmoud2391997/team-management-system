@@ -5,6 +5,7 @@ import { Sidebar } from '@/components/dashboard/sidebar'
 import { DEFAULT_ROLES, type Permission } from '@/lib/permissions'
 import { RouteGuard } from '@/components/dashboard/route-guard'
 import { PermissionsProvider } from '@/components/dashboard/permissions-context'
+import ProfileAvatar from '@/components/dashboard/profile-avatar'
 
 export default async function DashboardLayout({
   children,
@@ -86,14 +87,37 @@ export default async function DashboardLayout({
     }
   }
 
+  let employeeId: string | null = null
+  if (profile?.team_id) {
+    const supabase = getSupabase()
+    const { data: emp } = await supabase
+      .from('employees')
+      .select('id')
+      .eq('profile_id', profile.id)
+      .eq('team_id', profile.team_id)
+      .maybeSingle()
+    employeeId = emp?.id || null
+  }
+
   return (
     <PermissionsProvider>
       <div className="flex h-screen bg-background">
         <Sidebar userRole={profile?.team_id ? profile?.role : undefined} />
         <main className="flex-1 overflow-y-auto ml-64">
-          <RouteGuard permissions={permissions} hasTeam={!!profile?.team_id}>
-            {children}
-          </RouteGuard>
+          <div className="sticky top-0 z-10 flex justify-end border-b border-border bg-background/80 backdrop-blur-sm px-6 py-2">
+            <ProfileAvatar
+              userId={user.id}
+              firstName={profile?.first_name || null}
+              lastName={profile?.last_name || null}
+              email={user.email}
+              employeeId={employeeId}
+            />
+          </div>
+          <div className="p-0">
+            <RouteGuard permissions={permissions} hasTeam={!!profile?.team_id}>
+              {children}
+            </RouteGuard>
+          </div>
         </main>
       </div>
     </PermissionsProvider>
