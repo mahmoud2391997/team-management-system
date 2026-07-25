@@ -40,6 +40,9 @@ export default function SettingsPage() {
   }
 
   const isOwner = currentUser && team && currentUser.id === team.owner_id
+  const isAdminCount = members.filter((m: any) => m.role === 'ADMIN').length
+  const isOnlyAdmin = currentUser?.role === 'ADMIN' && isAdminCount <= 1
+  const canDeleteTeam = currentUser?.role === 'ADMIN'
 
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
@@ -102,7 +105,7 @@ export default function SettingsPage() {
             <p className="font-medium">{team.name}</p>
             <p className="text-sm text-muted-foreground">Team ID: {team.id}</p>
           </div>
-          {isOwner ? (
+          {canDeleteTeam ? (
             <div>
               <Button variant="destructive" size="sm" onClick={() => setShowDeleteConfirm(true)}>
                 <Trash2 className="h-4 w-4 mr-2" />
@@ -110,7 +113,7 @@ export default function SettingsPage() {
               </Button>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Only the team owner can delete the team.</p>
+            <p className="text-sm text-muted-foreground">Only admins can delete the team.</p>
           )}
           {showDeleteConfirm && (
             <div className="border border-destructive/50 rounded-lg p-4 bg-destructive/5">
@@ -136,7 +139,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {members.length > 1 && (
+      {!isOnlyAdmin && members.length > 1 && (
       <Card>
         <CardHeader>
           <CardTitle>Leave Team</CardTitle>

@@ -661,11 +661,23 @@ export async function removeFromTeam(memberId: string) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('team_id')
+    .select('team_id, role')
     .eq('id', memberId)
     .single()
 
   const currentTeamId = profile?.team_id
+
+  if (profile?.role === 'ADMIN') {
+    const { count } = await supabase
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('team_id', currentTeamId)
+      .eq('role', 'ADMIN')
+
+    if (count !== null && count <= 1) {
+      return { error: 'Cannot remove the last admin from the team' }
+    }
+  }
 
   await supabase.from('team_members').delete().eq('user_id', memberId).eq('team_id', currentTeamId)
 
@@ -706,11 +718,23 @@ export async function leaveTeam() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('team_id')
+    .select('team_id, role')
     .eq('id', session.userId)
     .single()
 
   if (!profile?.team_id) return { error: 'Not in any team' }
+
+  if (profile.role === 'ADMIN') {
+    const { count } = await supabase
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('team_id', profile.team_id)
+      .eq('role', 'ADMIN')
+
+    if (count !== null && count <= 1) {
+      return { error: 'You are the last admin. Assign another admin before leaving.' }
+    }
+  }
 
   await supabase.from('team_members').delete().eq('user_id', session.userId).eq('team_id', profile.team_id)
 
