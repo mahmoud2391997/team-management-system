@@ -8,7 +8,10 @@ import EmployeeForm from '@/components/dashboard/employee-form'
 import EmployeeList from '@/components/dashboard/employee-list'
 import DeleteModal from '@/components/ui/delete-modal'
 import EmployeeDetailModal from '@/components/ui/employee-detail-modal'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { Employee, Department } from '@/lib/types'
+
+const ITEMS_PER_PAGE = 10
 
 interface EmployeesContainerProps {
   initialEmployees: Employee[]
@@ -29,6 +32,7 @@ export default function EmployeesContainer({
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [viewTarget, setViewTarget] = useState<Employee | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
 
   const filteredEmployees = useMemo(() => {
     return employees.filter((emp) => {
@@ -43,9 +47,30 @@ export default function EmployeesContainer({
     })
   }, [employees, searchTerm, filterDept])
 
+  // Reset to first page when search/filter changes
+  const paginatedEmployees = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+    const endIndex = startIndex + ITEMS_PER_PAGE
+    return filteredEmployees.slice(startIndex, endIndex)
+  }, [filteredEmployees, currentPage])
+
+  const totalPages = Math.ceil(filteredEmployees.length / ITEMS_PER_PAGE)
+
   const handleEdit = (employee: Employee) => {
     setEditingEmployee(employee)
     setShowForm(true)
+  }
+
+  // Reset pagination when search term changes
+  const handleSearchChange = (term: string) => {
+    setSearchTerm(term)
+    setCurrentPage(1)
+  }
+
+  // Reset pagination when department filter changes
+  const handleDeptFilterChange = (dept: string) => {
+    setFilterDept(dept)
+    setCurrentPage(1)
   }
 
   const handleCloseForm = async (saved?: boolean) => {
@@ -125,12 +150,12 @@ export default function EmployeesContainer({
           type="text"
           placeholder="Search by name or email..."
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => handleSearchChange(e.target.value)}
           className="flex-1 px-4 py-2 border border-border rounded-lg bg-background text-foreground"
         />
         <select
           value={filterDept}
-          onChange={(e) => setFilterDept(e.target.value)}
+          onChange={(e) => handleDeptFilterChange(e.target.value)}
           className="px-4 py-2 border border-border rounded-lg bg-background text-foreground"
         >
           <option value="">All Departments</option>
@@ -152,12 +177,51 @@ export default function EmployeesContainer({
           </p>
         </Card>
       ) : (
-        <EmployeeList
-          employees={filteredEmployees}
-          onEdit={handleEdit}
-          onDelete={handleDeleteClick}
-          onView={handleView}
-        />
+        <>
+          <EmployeeList
+            employees={paginatedEmployees}
+            onEdit={handleEdit}
+            onDelete={handleDeleteClick}
+            onView={handleView}
+          />
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-6 pt-6 border-t border-border">
+              <p className="text-sm text-muted-foreground">
+                Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredEmployees.length)} of {filteredEmployees.length}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="flex items-center gap-2">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    <Button
+                      key={page}
+                      variant={page === currentPage ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setCurrentPage(page)}
+                    >
+                      {page}
+                    </Button>
+                  ))}
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
