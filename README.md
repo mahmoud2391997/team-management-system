@@ -1,394 +1,239 @@
 # Team Management System
 
-A modern, full-featured team management and project tracking application built with Next.js 16, Supabase, and TypeScript.
+## فكرة المشروع (Project Idea)
 
-## Table of Contents
+نظام لإدارة فريق العمل داخل الشركة، يتيح للمستخدم تسجيل الدخول، واستعراض لوحة تحكم تحتوي على إحصائيات عامة، بالإضافة إلى إدارة بيانات الموظفين، الأقسام، والمهام من خلال واجهة استخدام حديثة ومتجاوبة مع مختلف أحجام الشاشات.
 
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Getting Started](#getting-started)
-- [Project Structure](#project-structure)
-- [Key Features Guide](#key-features-guide)
-- [Database Schema](#database-schema)
-- [Authentication & Authorization](#authentication--authorization)
-- [API Routes](#api-routes)
-- [Configuration](#configuration)
-- [Development](#development)
-- [Deployment](#deployment)
-
-## Features
-
-### Core Features
-- **Department Management**: Create and manage organizational departments with managers
-- **Employee Management**: Add, edit, and manage team members with roles and positions
-- **Task Management**: Create tasks with priority levels, due dates, and status tracking
-- **Kanban Board**: Visual task management with drag-and-drop functionality
-- **Employee Details**: Comprehensive employee profiles with task history and statistics
-- **Search & Pagination**: Search employees by name/email with paginated results
-- **Dashboard**: Real-time overview with task statistics and recent activity
-- **404 Error Page**: User-friendly error handling
-
-### Task Management
-- Priority levels: Low, Medium, High, Urgent
-- Status tracking: To Do, In Progress, Review, Completed
-- Due date assignment
-- Department and employee assignment
-- Task history and completion tracking
-- Kanban-style board visualization
-
-### Employee Management
-- Full employee profiles with contact information
+**Key Highlights:**
 - Role-based access control (Admin, Manager, Employee)
-- Department assignment
-- Position and salary tracking
-- Join date records
-- Employee detail pages with assigned tasks and statistics
-- Search and filter by name, email, or department
-- Pagination with 10 items per page
+- Kanban board for task management with drag-and-drop
+- Real-time dashboard with charts and statistics
+- Email invitations for team members
+- Notification system for task assignments, edits, and status changes
+- Manual employee entry with automatic email invitations
 
-### Dashboard & Analytics
-- Real-time statistics on employees, departments, and tasks
-- Task completion rate tracking
-- Recent tasks overview
-- Task status distribution (To Do, In Progress, Review, Completed)
-- Visual progress indicators
-- Quick navigation to all management features
+---
 
-## Tech Stack
+## التقنيات المستخدمة (Technologies Used)
 
 ### Frontend
-- **Framework**: Next.js 16+ (App Router)
+- **Framework**: Next.js 16+ (App Router, Server Actions)
 - **UI Library**: React 19.2+
 - **Styling**: Tailwind CSS 4
 - **Component Library**: shadcn/ui
+- **Charts**: Recharts (donut chart for task status overview)
 - **Icons**: Lucide React
-- **Type Safety**: TypeScript
+- **Language**: TypeScript
 
-### Backend
+### Backend & Database
 - **Runtime**: Node.js
-- **Framework**: Next.js Server Actions
+- **Server**: Next.js Server Actions (no separate API layer)
 - **Database**: Supabase (PostgreSQL)
-- **Authentication**: Supabase Auth
-- **API Client**: Supabase JavaScript Client
+- **Auth**: JWT (httpOnly cookies) + bcrypt password hashing
+- **Email**: Nodemailer (SMTP via Gmail)
+- **DB Direct Access**: pg (for schema management)
 
-### DevOps & Deployment
+### DevOps
 - **Hosting**: Vercel
 - **Version Control**: Git
+- **Package Manager**: pnpm
 
-## Getting Started
+---
+
+## خطوات التشغيل (Run Steps)
 
 ### Prerequisites
 - Node.js 18 or higher
-- npm, yarn, pnpm, or bun
-- Git
+- pnpm (or npm/yarn/bun)
+- A Supabase project (or PostgreSQL database)
 
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/mahmoud2391997/team-management-system.git
-   cd team-management-system
-   ```
-
-2. **Install dependencies**
-   ```bash
-   pnpm install
-   # or npm install, yarn install, bun install
-   ```
-
-3. **Set up environment variables**
-   Create a `.env.local` file in the root directory:
-   ```env
-   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-   ```
-
-4. **Run the development server**
-   ```bash
-   pnpm dev
-   ```
-
-5. **Open in browser**
-   Navigate to [http://localhost:3000](http://localhost:3000)
-
-## Project Structure
-
-```
-team-management-system/
-├── app/
-│   ├── (dashboard)/              # Dashboard routes
-│   │   ├── dashboard/            # Main dashboard page
-│   │   ├── employees/            # Employee management
-│   │   │   ├── page.tsx          # Employees list
-│   │   │   └── [id]/page.tsx     # Employee detail page
-│   │   ├── tasks/                # Task management
-│   │   ├── departments/          # Department management
-│   │   └── notifications/        # Notifications page
-│   ├── auth/                     # Authentication routes
-│   ├── actions/                  # Server actions
-│   ├── layout.tsx                # Root layout
-│   ├── page.tsx                  # Home page
-│   ├── not-found.tsx             # 404 error page
-│   └── globals.css               # Global styles
-├── components/
-│   ├── dashboard/                # Dashboard-specific components
-│   │   ├── employees-container.tsx
-│   │   ├── tasks-container.tsx
-│   │   ├── task-form.tsx
-│   │   ├── employee-form.tsx
-│   │   └── permissions-context.tsx
-│   ├── ui/                       # Reusable UI components
-│   │   ├── button.tsx
-│   │   ├── card.tsx
-│   │   ├── input.tsx
-│   │   ├── employee-detail-modal.tsx
-│   │   └── task-detail-modal.tsx
-│   └── auth/                     # Auth components
-├── lib/
-│   ├── actions/                  # Server actions & data fetching
-│   │   └── data-actions.ts
-│   ├── auth.ts                   # Auth utilities
-│   ├── permissions.ts            # Role-based access control
-│   ├── supabase.ts              # Supabase client setup
-│   ├── types.ts                 # TypeScript type definitions
-│   ├── hooks/                   # Custom React hooks
-│   └── utils/                   # Utility functions
-├── prisma/                      # Prisma configuration
-├── public/                      # Static assets
-├── middleware.ts                # Authentication middleware
-└── package.json
+### 1. Clone the repository
+```bash
+git clone https://github.com/mahmoud2391997/team-management-system.git
+cd team-management-system
 ```
 
-## Key Features Guide
-
-### Dashboard
-The dashboard provides a real-time overview of your organization:
-- **Key Metrics**: Total employees, departments, tasks, and completion rate
-- **Task Status Overview**: Visual breakdown of tasks by status with progress bars
-- **Recent Tasks**: Latest tasks with priority and status indicators
-- **Quick Navigation**: Links to manage departments, employees, and tasks
-
-### Employee Management
-1. **View Employees**: Access the employees page to see all team members
-2. **Search & Filter**: Search by name/email and filter by department
-3. **Pagination**: Browse through employee lists with page-based navigation (10 per page)
-4. **Add Employee**: Create new team members with role and department assignment
-5. **View Details**: Click on an employee to see comprehensive profile with assigned tasks
-6. **Edit/Delete**: Update employee information or remove from team
-
-### Task Management
-1. **Kanban Board**: View tasks organized by status columns
-2. **Drag & Drop**: Reorganize tasks between status columns
-3. **Create Tasks**: Add new tasks with priority, due date, and assignee
-4. **Task Details**: View complete task information and history
-5. **Filter**: Filter tasks by department
-6. **Priority Levels**: Organize by urgency (Low, Medium, High, Urgent)
-
-### Department Management
-1. **Create Departments**: Set up organizational units with managers
-2. **Assign Manager**: Link department managers to manage team members
-3. **Edit/Delete**: Update department details or remove departments
-4. **Icon Customization**: Add emoji icons to departments for visual identification
-
-### Employee Detail Page
-- Comprehensive profile information
-- Task statistics and completion rates
-- All assigned tasks with status and priority
-- Visual progress indicators
-- Task completion timeline
-
-## Database Schema
-
-### Main Tables
-
-#### Profiles
-```sql
-- id: UUID (primary key)
-- email: STRING (unique)
-- first_name: STRING
-- last_name: STRING
-- role: ENUM (Admin, Manager, Employee)
-- team_id: UUID
-- created_at: TIMESTAMP
+### 2. Install dependencies
+```bash
+pnpm install
 ```
 
-#### Departments
-```sql
-- id: UUID (primary key)
-- team_id: UUID
-- name: STRING
-- manager_id: UUID (references profiles)
-- icon: STRING
-- created_at: TIMESTAMP
+### 3. Set up environment variables
+Copy the example env file and fill in your values:
+```bash
+cp .env.example .env
 ```
 
-#### Employees
-```sql
-- id: UUID (primary key)
-- profile_id: UUID (references profiles)
-- department_id: UUID (references departments)
-- position: STRING
-- salary: NUMERIC
-- join_date: DATE
-- status: ENUM (ACTIVE, ON_LEAVE, INACTIVE)
-- created_at: TIMESTAMP
+Required variables:
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your Supabase anonymous key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Your Supabase service role key |
+| `JWT_SECRET` | Secret key for JWT token signing |
+| `SMTP_EMAIL` | Gmail address for sending emails |
+| `SMTP_PASSWORD` | Gmail app password |
+| `SITE_URL` | Your app URL (e.g., `http://localhost:3000`) |
+
+### 4. Set up the database
+Run the SQL schema in your Supabase SQL Editor:
+```bash
+# The schema file is located at:
+supabase/schema.sql
 ```
 
-#### Tasks
-```sql
-- id: UUID (primary key)
-- department_id: UUID (references departments)
-- title: STRING
-- description: TEXT
-- priority: ENUM (LOW, MEDIUM, HIGH, URGENT)
-- status: ENUM (TODO, IN_PROGRESS, REVIEW, COMPLETED)
-- assignee_id: UUID (references profiles)
-- due_date: DATE
-- created_at: TIMESTAMP
-```
-
-## Authentication & Authorization
-
-### Role-Based Access Control (RBAC)
-- **Admin**: Full system access
-- **Manager**: Can manage department employees and tasks
-- **Employee**: Can view and update assigned tasks
-
-### Permissions System
-Permissions defined in `lib/permissions.ts`:
-- `dashboard.view`
-- `employees.view`, `employees.create`, `employees.edit`, `employees.delete`
-- `tasks.view`, `tasks.create`, `tasks.edit`, `tasks.delete`
-- `departments.view`, `departments.create`, `departments.edit`, `departments.delete`
-
-## API Routes
-
-### Server Actions (lib/actions/data-actions.ts)
-
-**Profile Management**
-- `getProfile()`: Get current user profile
-- `getTeamProfile()`: Get user's team profile
-
-**Dashboard**
-- `getDashboardStats()`: Get dashboard statistics
-
-**Employees**
-- `getEmployees()`: Fetch all employees
-- `createEmployee()`: Create new employee
-- `updateEmployee()`: Update employee
-- `deleteEmployee()`: Delete employee
-
-**Departments**
-- `getDepartments()`: Fetch all departments
-- `createDepartment()`: Create department
-- `updateDepartment()`: Update department
-- `deleteDepartment()`: Delete department
-
-**Tasks**
-- `getTasks()`: Fetch all tasks
-- `createTask()`: Create task
-- `updateTask()`: Update task
-- `deleteTask()`: Delete task
-
-## Configuration
-
-### Environment Variables
-
-Create `.env.local`:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-```
-
-### Tailwind Configuration
-- Custom color palette with semantic naming
-- Font: Geist (sans) and Geist Mono
-- Responsive design system
-- Dark mode support
-
-## Development
-
-### Running Development Server
+### 5. Run the development server
 ```bash
 pnpm dev
 ```
 
-### Building for Production
-```bash
-pnpm build
-pnpm start
-```
+### 6. Open in browser
+Navigate to [http://localhost:3000](http://localhost:3000)
 
-### Code Quality
-```bash
-pnpm lint
-pnpm type-check
-```
-
-## Deployment
-
-### Deploy to Vercel (Recommended)
-
-1. **Push to GitHub**
-   ```bash
-   git push origin main
-   ```
-
-2. **Import in Vercel**
-   - Go to [vercel.com](https://vercel.com)
-   - Import your GitHub repository
-   - Add environment variables
-   - Deploy
-
-### Manual Deployment
-1. Build: `pnpm build`
-2. Deploy `.next` directory to your hosting
-
-## Usage Examples
-
-### Creating an Employee
-```tsx
-const result = await createEmployee({
-  profile_id: profileId,
-  department_id: deptId,
-  position: "Software Engineer",
-  salary: 80000,
-  join_date: new Date(),
-  status: "ACTIVE"
-})
-```
-
-### Creating a Task
-```tsx
-const result = await createTask({
-  title: "Implement feature",
-  priority: "HIGH",
-  status: "TODO",
-  department_id: deptId,
-  assignee_id: employeeId,
-  due_date: new Date("2025-02-01")
-})
-```
-
-## Troubleshooting
-
-**Authentication Errors**
-- Verify Supabase credentials in `.env.local`
-- Check user is logged in
-- Verify permissions are assigned
-
-**Database Issues**
-- Confirm Supabase project is active
-- Check network connectivity
-
-**Page Not Found**
-- Check that dynamic routes are configured properly
-
-## License
-
-MIT License - Open source and available for use
+### 7. Create your first account
+- Go to **Create Team** to set up your team and admin account
+- Start adding departments, employees, and tasks
 
 ---
 
-**Last Updated**: July 2025
+## هيكل المشروع (Project Structure)
+
+```
+team-management-system/
+├── app/
+│   ├── (dashboard)/                  # Protected dashboard routes
+│   │   ├── dashboard/page.tsx        # Main dashboard with stats & chart
+│   │   ├── employees/
+│   │   │   ├── page.tsx              # Employee list with search & pagination
+│   │   │   └── [id]/page.tsx         # Employee detail with assigned tasks
+│   │   ├── tasks/page.tsx            # Kanban board with drag-and-drop
+│   │   ├── departments/page.tsx      # Department management
+│   │   ├── members/page.tsx          # Team member management
+│   │   ├── notifications/page.tsx    # Notification center
+│   │   ├── roles/page.tsx            # Role & permission management
+│   │   ├── profile/page.tsx          # User profile settings
+│   │   ├── settings/page.tsx         # Team settings & delete
+│   │   └── create-team/page.tsx      # Create new team
+│   ├── auth/                         # Public auth routes
+│   │   ├── login/page.tsx            # Login page
+│   │   ├── sign-up/page.tsx          # Sign up page
+│   │   └── create-team/page.tsx      # Team creation wizard
+│   ├── actions/
+│   │   ├── invitations.ts            # Invite, accept/decline, notifications
+│   │   ├── create-team.ts            # Team creation logic
+│   │   ├── delete-team.ts            # Team deletion with cascade
+│   │   └── signup.ts                 # Invited user signup
+│   ├── layout.tsx                    # Root layout
+│   ├── page.tsx                      # Landing page
+│   └── not-found.tsx                 # 404 page
+│
+├── components/
+│   ├── dashboard/
+│   │   ├── employees-container.tsx   # Employee list logic & state
+│   │   ├── employee-form.tsx         # Add/edit employee (profile or manual)
+│   │   ├── employee-list.tsx         # Employee card list
+│   │   ├── tasks-container.tsx       # Kanban board with D&D
+│   │   ├── task-form.tsx             # Add/edit task form
+│   │   ├── sidebar.tsx               # Navigation sidebar
+│   │   ├── task-status-chart.tsx     # Recharts donut chart
+│   │   └── permissions-context.tsx   # Client-side permissions provider
+│   ├── ui/
+│   │   ├── task-detail-modal.tsx     # Task detail popup
+│   │   ├── employee-detail-modal.tsx # Employee detail popup
+│   │   ├── delete-modal.tsx          # Reusable confirmation modal
+│   │   ├── skeleton.tsx              # Loading skeletons
+│   │   └── button.tsx, card.tsx...   # shadcn/ui components
+│   └── auth/
+│       └── auth-navbar.tsx           # Auth pages navbar
+│
+├── lib/
+│   ├── actions/
+│   │   └── data-actions.ts           # All CRUD server actions
+│   ├── auth.ts                       # JWT + bcrypt auth helpers
+│   ├── auth-middleware.ts            # Edge-compatible auth middleware
+│   ├── email.ts                      # Nodemailer email templates
+│   ├── permissions.ts                # 22 permissions, 3 default roles
+│   ├── supabase.ts                   # Supabase client singleton
+│   ├── types.ts                      # TypeScript type definitions
+│   └── utils/
+│       └── async-helpers.ts          # createSuccess/createError helpers
+│
+├── supabase/
+│   └── schema.sql                    # Full database schema
+├── middleware.ts                      # Route protection middleware
+├── .env.example                      # Environment variables template
+├── package.json
+└── README.md
+```
+
+---
+
+## الميزات الرئيسية (Key Features)
+
+### 1. لوحة التحكم (Dashboard)
+- **إحصائيات عامة**: عدد الموظفين، الأقسام، المهام، ومعدل الإنجاز
+- **رسم بياني**: مخطط دائري لتوزيع المهام حسب الحالة (To Do, In Progress, Review, Completed)
+- **أحدث المهام**: قائمة بأحدث 5 مهام مع الأولوية والحالة
+
+### 2. إدارة الموظفين (Employee Management)
+- **إضافة موظف**: عن طريق اختيار ملف شخصي موجود أو إدخال بيانات يدوياً
+- **تعديل بيانات الموظف**: الموقع، الراتب، الحالة، القسم، المدير
+- **حذف موظف**: مع تأكيد قبل الحذف
+- **عرض البيانات**: صفحة تفاصيل لكل موظف مع جميع المهام المسندة إليه
+- **البحث والفلترة**: بالاسم أو البريد الإلكتروني أو القسم
+- **تقسيم النتائج إلى صفحات**: 10 عناصر لكل صفحة
+
+### 3. إدارة الأقسام (Department Management)
+- **إضافة قسم**: مع تحديد المدير
+- **تعديل بيانات القسم**: الاسم والمدير
+- **حذف قسم**: مع تأكيد
+
+### 4. إدارة المهام (Task Management)
+- **لوحة كانبان**: عرض المهام كبطاقات مقسمة بأعمدة الحالة
+- **سحب وإفلات**: تغيير حالة المهام بالسحب
+- **إضافة مهمة**: العنوان، الوصف، الأولوية، الحالة، القسم، المسؤول، تاريخ التسليم
+- **تعديل مهمة**: تغيير أي بيانات مع إرسال إشعارات
+- **حذف مهمة**: مع إشعار المعنيين
+- **فلترة**: حسب القسم، "مسندة إليّ"، "أنشأتها أنا"
+
+### 5. نظام الإشعارات (Notification System)
+- عند تعيين مهمة → إشعار للموظف
+- عند تغيير حالة المهمة → إشعار للمنشئ والمسؤول
+- عند تعديل المهمة → إشعار للطرف الآخر
+- عند حذف المهمة → إشعار للمنشئ والمسؤول
+- عند إضافة موظف → إشعار للموظف
+- عند دعوة عضو → إشعار + بريد إلكتروني
+
+### 6. نظام الصلاحيات (Permission System)
+- **22 صلاحية** عبر 8 مجموعات
+- **3 أدوار افتراضية**: Admin (كاملة), Manager (جزئية), Employee (عرض فقط)
+- **أدوار مخصصة**: يمكن إنشاء أدوار بصلاحيات مخصصة
+
+### 7. نظام الدعوات (Invitation System)
+- دعوة أعضاء عبر البريد الإلكتروني
+- بريد إلكتروني تلقائي عند الدعوة
+- قبول أو رفض الدعوة من صفحة الإشعارات
+- إنشاء حساب جديد للأشخاص غير المسجلين
+
+---
+
+## قاعدة البيانات (Database Schema)
+
+| الجدول | الوصف |
+|--------|-------|
+| `Team` | الفرق (اسم، مالك) |
+| `users` | حسابات المستخدمين (بريد، كلمة مرور) |
+| `profiles` | الملفات الشخصية (اسم، بريد، دور، فريق) |
+| `team_members` | عضوية الفريق |
+| `departments` | الأقسام (اسم، مدير، فريق) |
+| `employees` | الموظفين (قسم، موقع، راتب، حالة) |
+| `tasks` | المهام (عنوان، وصف، أولوية، حالة، مسؤول، تاريخ) |
+| `invitations` | الدعوات (بريد، دور، حالة) |
+| `notifications` | الإشعارات (نوع، عنوان، رسالة، مقروء) |
+| `roles` | الأدوار المخصصة (اسم، صلاحيات) |
+
+---
+
+## License
+
+MIT License
