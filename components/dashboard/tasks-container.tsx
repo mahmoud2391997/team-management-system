@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card'
 import TaskForm from '@/components/dashboard/task-form'
 import TaskDetailModal from '@/components/ui/task-detail-modal'
 import { usePermissions } from '@/components/dashboard/permissions-context'
-import { GripVertical, Eye, Pencil, Trash2 } from 'lucide-react'
+import { GripVertical, Eye, Pencil, Trash2, CheckSquare } from 'lucide-react'
 import type { Task, Department } from '@/lib/types'
 
 const statusColumns = [
@@ -109,6 +109,10 @@ export default function TasksContainer({
     startTransition(() => router.refresh())
   }
 
+  // Check if there are no tasks at all
+  const hasNoTasks = tasks.length === 0
+  const hasNoFilteredTasks = filteredTasks.length === 0
+
   return (
     <div className="space-y-6">
       {showForm && (
@@ -129,27 +133,51 @@ export default function TasksContainer({
         canDelete={canDelete}
       />
 
-      <div className="flex gap-4 items-center justify-between">
-        <select
-          value={filterDept}
-          onChange={(e) => setFilterDept(e.target.value)}
-          className="px-4 py-2 border border-border rounded-lg bg-background text-foreground"
-        >
-          <option value="">All Departments</option>
-          {departments.map((dept) => (
-            <option key={dept.id} value={dept.id}>
-              {dept.name}
-            </option>
-          ))}
-        </select>
-        {canCreate && <Button onClick={() => { setEditingTask(null); setShowForm(true) }}>+ Add Task</Button>}
-      </div>
+      {hasNoTasks ? (
+        <Card className="border-dashed p-12 text-center">
+          <div className="flex justify-center mb-4">
+            <CheckSquare className="h-12 w-12 text-muted-foreground" />
+          </div>
+          <h3 className="text-lg font-semibold text-foreground mb-2">No Tasks Yet</h3>
+          <p className="text-muted-foreground mb-6">Get started by creating your first task.</p>
+          {canCreate && (
+            <Button onClick={() => { setEditingTask(null); setShowForm(true) }}>Create First Task</Button>
+          )}
+        </Card>
+      ) : (
+        <>
+          <div className="flex gap-4 items-center justify-between">
+            <select
+              value={filterDept}
+              onChange={(e) => setFilterDept(e.target.value)}
+              className="px-4 py-2 border border-border rounded-lg bg-background text-foreground"
+            >
+              <option value="">All Departments</option>
+              {departments.map((dept) => (
+                <option key={dept.id} value={dept.id}>
+                  {dept.name}
+                </option>
+              ))}
+            </select>
+            {canCreate && <Button onClick={() => { setEditingTask(null); setShowForm(true) }}>+ Add Task</Button>}
+          </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {statusColumns.map((column) => {
-          const columnTasks = filteredTasks.filter((t) => t.status === column.id)
-          const isOver = dragOverColumn === column.id
-          return (
+          {hasNoFilteredTasks ? (
+            <Card className="border-dashed p-12 text-center">
+              <CheckSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">No Tasks in This Department</h3>
+              <p className="text-muted-foreground">Try selecting a different department or create a new task.</p>
+            </Card>
+          ) : null}
+        </>
+      )}
+
+      {!hasNoFilteredTasks && (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {statusColumns.map((column) => {
+            const columnTasks = filteredTasks.filter((t) => t.status === column.id)
+            const isOver = dragOverColumn === column.id
+            return (
             <div
               key={column.id}
               onDragOver={(e) => handleDragOver(e, column.id)}
@@ -223,9 +251,10 @@ export default function TasksContainer({
                 ))}
               </div>
             </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

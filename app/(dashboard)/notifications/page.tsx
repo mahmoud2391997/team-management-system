@@ -38,7 +38,7 @@ export default function NotificationsPage() {
         setError(result.error)
         setActionId(null)
       } else {
-       // Force a full page reload to refresh sidebar with new team data
+        // Force a full page reload to refresh sidebar with new team data
         window.location.reload()
       }
     } catch (err) {
