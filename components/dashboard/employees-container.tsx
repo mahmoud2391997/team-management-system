@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useMemo, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useMemo } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { getEmployees, deleteEmployee } from '@/lib/actions/data-actions'
 import EmployeeForm from '@/components/dashboard/employee-form'
 import EmployeeList from '@/components/dashboard/employee-list'
+import DeleteModal from '@/components/ui/delete-modal'
+import EmployeeDetailModal from '@/components/ui/employee-detail-modal'
 import type { Employee, Department } from '@/lib/types'
 
 interface EmployeesContainerProps {
@@ -23,8 +25,10 @@ export default function EmployeesContainer({
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterDept, setFilterDept] = useState('')
-  const [isPending, startTransition] = useTransition()
-  const router = useRouter()
+  const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [viewTarget, setViewTarget] = useState<Employee | null>(null)
 
   const filteredEmployees = useMemo(() => {
     return employees.filter((emp) => {
@@ -44,14 +48,44 @@ export default function EmployeesContainer({
     setShowForm(true)
   }
 
-  const handleCloseForm = async () => {
+  const handleCloseForm = async (saved?: boolean) => {
     setShowForm(false)
     setEditingEmployee(null)
-    startTransition(() => router.refresh())
+    if (saved) {
+      const result = await getEmployees()
+      if (!result.error) setEmployees(result.data)
+    }
   }
 
-  const handleDelete = async () => {
-    startTransition(() => router.refresh())
+  const handleDeleteClick = (id: string) => {
+    const emp = employees.find((e) => e.id === id)
+    if (emp) {
+      setDeleteTarget(emp)
+      setDeleteError(null)
+    }
+  }
+
+  const handleView = (employee: Employee) => {
+    setViewTarget(employee)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      const result = await deleteEmployee(deleteTarget.id)
+      if (result.error) {
+        setDeleteError(result.error)
+      } else {
+        setEmployees((prev) => prev.filter((e) => e.id !== deleteTarget.id))
+        setDeleteTarget(null)
+      }
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete employee')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -60,8 +94,30 @@ export default function EmployeesContainer({
         <EmployeeForm
           employee={editingEmployee}
           departments={departments}
+          existingProfileIds={employees.map(e => e.profile_id)}
           onClose={handleCloseForm}
         />
+      )}
+
+      <DeleteModal
+        open={!!deleteTarget}
+        title="Remove Employee"
+        description={`Are you sure you want to remove ${deleteTarget?.profile?.first_name} ${deleteTarget?.profile?.last_name} (${deleteTarget?.profile?.email}) from the team?`}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => { setDeleteTarget(null); setDeleteError(null) }}
+        loading={deleting}
+      />
+
+      <EmployeeDetailModal
+        open={!!viewTarget}
+        employee={viewTarget}
+        onClose={() => setViewTarget(null)}
+        onEdit={(emp) => { setViewTarget(null); handleEdit(emp) }}
+      />
+      {deleteError && (
+        <Card className="p-4 border border-destructive bg-destructive/10 text-sm text-destructive">
+          {deleteError}
+        </Card>
       )}
 
       <div className="flex gap-4 items-center justify-between">
@@ -96,13 +152,12 @@ export default function EmployeesContainer({
           </p>
         </Card>
       ) : (
-        <div className={isPending ? 'opacity-60 pointer-events-none' : ''}>
-          <EmployeeList
-            employees={filteredEmployees}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-          />
-        </div>
+        <EmployeeList
+          employees={filteredEmployees}
+          onEdit={handleEdit}
+          onDelete={handleDeleteClick}
+          onView={handleView}
+        />
       )}
     </div>
   )

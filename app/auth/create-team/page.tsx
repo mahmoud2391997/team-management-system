@@ -11,6 +11,9 @@ import AuthNavbar from '@/components/auth-navbar'
 
 export default function CreateTeamPage() {
   const [teamName, setTeamName] = useState('')
+  const [isRegistered, setIsRegistered] = useState(false)
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [repeatPassword, setRepeatPassword] = useState('')
@@ -22,13 +25,13 @@ export default function CreateTeamPage() {
     setLoading(true)
     setError(null)
 
-    if (password !== repeatPassword) {
+    if (!isRegistered && password !== repeatPassword) {
       setError('Passwords do not match')
       setLoading(false)
       return
     }
 
-    const result = await createTeamWithAccount(teamName, email, password)
+    const result = await createTeamWithAccount(teamName, email, password, isRegistered ? undefined : firstName, isRegistered ? undefined : lastName)
 
     if (result.error) {
       setError(result.error)
@@ -63,8 +66,44 @@ export default function CreateTeamPage() {
                 onChange={(e) => setTeamName(e.target.value)}
               />
             </div>
+            {!isRegistered && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="firstName">First Name</Label>
+                  <Input
+                    id="firstName"
+                    type="text"
+                    placeholder="John"
+                    required
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="lastName">Last Name</Label>
+                  <Input
+                    id="lastName"
+                    type="text"
+                    placeholder="Doe"
+                    required
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <input
+                id="isRegistered"
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300"
+                checked={isRegistered}
+                onChange={(e) => { setIsRegistered(e.target.checked); setRepeatPassword('') }}
+              />
+              <Label htmlFor="isRegistered" className="text-sm font-normal cursor-pointer">Already registered</Label>
+            </div>
             <div className="grid gap-2">
-              <Label htmlFor="email">Your Email</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -75,7 +114,7 @@ export default function CreateTeamPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{isRegistered ? 'Password' : 'Create Password'}</Label>
               <Input
                 id="password"
                 type="password"
@@ -85,17 +124,19 @@ export default function CreateTeamPage() {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="repeat-password">Confirm Password</Label>
-              <Input
-                id="repeat-password"
-                type="password"
-                required
-                minLength={6}
-                value={repeatPassword}
-                onChange={(e) => setRepeatPassword(e.target.value)}
-              />
-            </div>
+            {!isRegistered && (
+              <div className="grid gap-2">
+                <Label htmlFor="repeat-password">Confirm Password</Label>
+                <Input
+                  id="repeat-password"
+                  type="password"
+                  required
+                  minLength={6}
+                  value={repeatPassword}
+                  onChange={(e) => setRepeatPassword(e.target.value)}
+                />
+              </div>
+            )}
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Creating...' : 'Create Team'}

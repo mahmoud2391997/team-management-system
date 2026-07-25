@@ -98,6 +98,25 @@ export async function getUserInfo() {
   }
 }
 
+export async function updateProfile(firstName: string, lastName: string) {
+  const session = await getSessionFromCookies()
+  if (!session) return { error: 'Not authenticated' }
+
+  const supabase = getSupabase()
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      first_name: firstName || null,
+      last_name: lastName || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', session.userId)
+
+  if (error) return { error: error.message }
+  return { success: true }
+}
+
 export async function resetPassword(currentPassword: string, newPassword: string) {
   const session = await getSessionFromCookies()
   if (!session) return { error: 'Not authenticated' }

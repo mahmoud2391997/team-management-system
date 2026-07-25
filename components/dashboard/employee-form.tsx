@@ -8,11 +8,13 @@ import { Card } from '@/components/ui/card'
 export default function EmployeeForm({
   employee,
   departments,
+  existingProfileIds = [],
   onClose,
 }: {
   employee?: any
   departments: any[]
-  onClose: () => void
+  existingProfileIds?: string[]
+  onClose: (saved?: boolean) => void
 }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -69,7 +71,7 @@ export default function EmployeeForm({
         return
       }
 
-      onClose()
+      onClose(true)
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to save employee')
     } finally {
@@ -94,9 +96,11 @@ export default function EmployeeForm({
               className="w-full px-4 py-2 border border-border rounded-lg bg-background text-foreground"
             >
               <option value="">Choose a user...</option>
-              {profiles.map((profile) => (
+              {profiles
+                .filter((p) => employee ? p.id === employee.profile_id : !existingProfileIds.includes(p.id))
+                .map((profile) => (
                 <option key={profile.id} value={profile.id}>
-                  {profile.first_name} {profile.last_name} ({profile.email})
+                  {profile.first_name || profile.last_name ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : profile.email} ({profile.email}) - {profile.role}
                 </option>
               ))}
             </select>
@@ -175,7 +179,7 @@ export default function EmployeeForm({
           >
             <option value="">No Manager</option>
             {profiles.map((profile) => (
-              <option key={profile.id} value={profile.id}>{profile.first_name} {profile.last_name}</option>
+              <option key={profile.id} value={profile.id}>{profile.first_name || profile.last_name ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : profile.email} ({profile.email}) - {profile.role}</option>
             ))}
           </select>
         </div>

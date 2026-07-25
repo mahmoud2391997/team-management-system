@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getUserInfo, resetPassword } from '@/lib/actions/auth-actions'
+import { getUserInfo, resetPassword, updateProfile } from '@/lib/actions/auth-actions'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -19,6 +19,11 @@ export default function ProfilePage() {
   const [pwSuccess, setPwSuccess] = useState<string | null>(null)
   const [showCurrentPw, setShowCurrentPw] = useState(false)
   const [showNewPw, setShowNewPw] = useState(false)
+  const [editFirstName, setEditFirstName] = useState('')
+  const [editLastName, setEditLastName] = useState('')
+  const [nameLoading, setNameLoading] = useState(false)
+  const [nameError, setNameError] = useState<string | null>(null)
+  const [nameSuccess, setNameSuccess] = useState<string | null>(null)
 
   useEffect(() => {
     loadUserInfo()
@@ -28,7 +33,25 @@ export default function ProfilePage() {
     setLoading(true)
     const info = await getUserInfo()
     setUserInfo(info)
+    setEditFirstName(info?.first_name || '')
+    setEditLastName(info?.last_name || '')
     setLoading(false)
+  }
+
+  const handleUpdateName = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setNameLoading(true)
+    setNameError(null)
+    setNameSuccess(null)
+
+    const result = await updateProfile(editFirstName, editLastName)
+    if (result.error) {
+      setNameError(result.error)
+    } else {
+      setNameSuccess('Name updated successfully')
+      setUserInfo((prev: any) => ({ ...prev, first_name: editFirstName || null, last_name: editLastName || null }))
+    }
+    setNameLoading(false)
   }
 
   const handleResetPassword = async (e: React.FormEvent) => {
@@ -83,13 +106,13 @@ export default function ProfilePage() {
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
               <span className="font-bold text-primary text-2xl">
-                {userInfo.first_name?.[0] || userInfo.email[0].toUpperCase()}
+                {(editFirstName || userInfo.first_name)?.[0] || userInfo.email[0].toUpperCase()}
               </span>
             </div>
             <div>
               <CardTitle className="text-xl">
-                {userInfo.first_name && userInfo.last_name
-                  ? `${userInfo.first_name} ${userInfo.last_name}`
+                {(editFirstName || userInfo.first_name) && (editLastName || userInfo.last_name)
+                  ? `${editFirstName || userInfo.first_name} ${editLastName || userInfo.last_name}`
                   : userInfo.email}
               </CardTitle>
               <CardDescription>{userInfo.role}</CardDescription>
@@ -97,6 +120,31 @@ export default function ProfilePage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
+          <form onSubmit={handleUpdateName} className="space-y-4 max-w-sm">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>First Name</Label>
+                <Input
+                  value={editFirstName}
+                  onChange={e => setEditFirstName(e.target.value)}
+                  placeholder="First name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Last Name</Label>
+                <Input
+                  value={editLastName}
+                  onChange={e => setEditLastName(e.target.value)}
+                  placeholder="Last name"
+                />
+              </div>
+            </div>
+            {nameError && <p className="text-sm text-destructive">{nameError}</p>}
+            {nameSuccess && <p className="text-sm text-green-600">{nameSuccess}</p>}
+            <Button type="submit" size="sm" disabled={nameLoading}>
+              {nameLoading ? 'Saving...' : 'Save Name'}
+            </Button>
+          </form>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div className="space-y-1">
               <p className="text-muted-foreground">Email</p>
@@ -109,18 +157,6 @@ export default function ProfilePage() {
                 <span className="font-medium">{userInfo.role}</span>
               </div>
             </div>
-            {userInfo.first_name && (
-              <div className="space-y-1">
-                <p className="text-muted-foreground">First Name</p>
-                <p className="font-medium">{userInfo.first_name}</p>
-              </div>
-            )}
-            {userInfo.last_name && (
-              <div className="space-y-1">
-                <p className="text-muted-foreground">Last Name</p>
-                <p className="font-medium">{userInfo.last_name}</p>
-              </div>
-            )}
             <div className="space-y-1">
               <p className="text-muted-foreground">Member Since</p>
               <p className="font-medium">{new Date(userInfo.created_at).toLocaleDateString()}</p>

@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import TaskForm from '@/components/dashboard/task-form'
-import { GripVertical } from 'lucide-react'
+import TaskDetailModal from '@/components/ui/task-detail-modal'
+import { usePermissions } from '@/components/dashboard/permissions-context'
+import { GripVertical, Eye, Pencil, Trash2 } from 'lucide-react'
 import type { Task, Department } from '@/lib/types'
 
 const statusColumns = [
@@ -31,6 +33,12 @@ export default function TasksContainer({
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
+  const [viewTarget, setViewTarget] = useState<Task | null>(null)
+  const { permissions } = usePermissions()
+
+  const canCreate = permissions.includes('tasks.create')
+  const canEdit = permissions.includes('tasks.edit')
+  const canDelete = permissions.includes('tasks.delete')
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
 
@@ -111,6 +119,16 @@ export default function TasksContainer({
         />
       )}
 
+      <TaskDetailModal
+        open={!!viewTarget}
+        task={viewTarget}
+        onClose={() => setViewTarget(null)}
+        onEdit={(t) => { setViewTarget(null); handleEdit(t) }}
+        onDelete={(id) => { setViewTarget(null); handleDelete(id) }}
+        canEdit={canEdit}
+        canDelete={canDelete}
+      />
+
       <div className="flex gap-4 items-center justify-between">
         <select
           value={filterDept}
@@ -124,7 +142,7 @@ export default function TasksContainer({
             </option>
           ))}
         </select>
-        <Button onClick={() => { setEditingTask(null); setShowForm(true) }}>+ Add Task</Button>
+        {canCreate && <Button onClick={() => { setEditingTask(null); setShowForm(true) }}>+ Add Task</Button>}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -147,19 +165,34 @@ export default function TasksContainer({
               </h3>
               <div className="space-y-3">
                 {columnTasks.map((task) => (
-                  <Card
-                    key={task.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, task.id)}
-                    onDragEnd={handleDragEnd}
-                    className={`p-4 bg-card border border-border cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow ${draggedId === task.id ? 'opacity-40' : ''}`}
-                  >
+                    <Card
+                      key={task.id}
+                      draggable={canEdit}
+                      onDragStart={(e) => handleDragStart(e, task.id)}
+                      onDragEnd={handleDragEnd}
+                      className={`p-4 bg-card border border-border ${canEdit ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} hover:shadow-md transition-shadow ${draggedId === task.id ? 'opacity-40' : ''}`}
+                    >
                     <div className="space-y-2">
                       <div className="flex items-start gap-1">
                         <GripVertical className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0 cursor-grab" />
                         <h4 className="font-semibold text-foreground text-sm flex-1">
                           {task.title}
                         </h4>
+                        <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" onClick={() => setViewTarget(task)}>
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                          {canEdit && (
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" onClick={() => handleEdit(task)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(task.id)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       {task.description && (
                         <p className="text-xs text-muted-foreground">
@@ -185,16 +218,8 @@ export default function TasksContainer({
                           </span>
                         )}
                       </div>
-                      <div className="flex gap-2 mt-3">
-                        <Button size="sm" variant="outline" className="flex-1" onClick={() => handleEdit(task)}>
-                          Edit
-                        </Button>
-                        <Button size="sm" variant="destructive" className="flex-1" onClick={() => handleDelete(task.id)}>
-                          Delete
-                        </Button>
                       </div>
-                    </div>
-                  </Card>
+                    </Card>
                 ))}
               </div>
             </div>

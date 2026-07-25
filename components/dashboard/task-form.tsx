@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { createTask, updateTask } from '@/lib/actions/data-actions'
+import { useState, useEffect } from 'react'
+import { createTask, updateTask, getEmployees } from '@/lib/actions/data-actions'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -19,16 +19,49 @@ export default function TaskForm({
 }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [allEmployees, setAllEmployees] = useState<any[]>([])
+  const [assignees, setAssignees] = useState<any[]>([])
   const [formData, setFormData] = useState({
     title: task?.title ?? '',
     description: task?.description ?? '',
     priority: task?.priority ?? 'MEDIUM',
     status: task?.status ?? 'TODO',
     department_id: task?.department_id ?? '',
+    assignee_id: task?.assignee_id ?? '',
     due_date: task?.due_date ? new Date(task.due_date).toISOString().split('T')[0] : '',
   })
 
   const isEditing = !!task
+
+  useEffect(() => {
+    getEmployees().then((result) => {
+      if (!result.error) setAllEmployees(result.data)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (formData.department_id) {
+      const deptEmployees = allEmployees
+        .filter((e) => e.department_id === formData.department_id && e.profile)
+        .map((e) => e.profile)
+      if (isEditing && task?.assignee_id) {
+        const currentAssignee = allEmployees.find((e) => e.profile_id === task.assignee_id)
+        if (currentAssignee?.profile && !deptEmployees.find((p: any) => p.id === task.assignee_id)) {
+          deptEmployees.unshift(currentAssignee.profile)
+        }
+      }
+      setAssignees(deptEmployees)
+    } else {
+      const all = allEmployees.filter((e) => e.profile).map((e) => e.profile)
+      if (isEditing && task?.assignee_id) {
+        const currentAssignee = allEmployees.find((e) => e.profile_id === task.assignee_id)
+        if (currentAssignee?.profile && !all.find((p: any) => p.id === task.assignee_id)) {
+          all.unshift(currentAssignee.profile)
+        }
+      }
+      setAssignees(all)
+    }
+  }, [formData.department_id, allEmployees])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,6 +74,7 @@ export default function TaskForm({
       priority: formData.priority,
       status: formData.status,
       department_id: formData.department_id || null,
+      assignee_id: formData.assignee_id || null,
       due_date: formData.due_date ? new Date(formData.due_date) : null,
     }
 
@@ -121,6 +155,25 @@ export default function TaskForm({
                 <option value="">None</option>
                 {departments.map((d) => (
                   <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Assignee</Label>
+              <select
+                value={formData.assignee_id}
+                onChange={(e) => setFormData({ ...formData, assignee_id: e.target.value })}
+                disabled={!formData.department_id}
+                className="px-3 py-2 border border-border rounded-lg bg-background text-foreground text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {!formData.department_id
+                  ? <option value="">Select a department first</option>
+                  : <option value="">Unassigned</option>
+                }
+                {assignees.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : p.email} ({p.email})
+                  </option>
                 ))}
               </select>
             </div>

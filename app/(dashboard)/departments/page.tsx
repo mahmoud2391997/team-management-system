@@ -118,7 +118,7 @@ export default function DepartmentsPage() {
                 <option value="">Select a manager...</option>
                 {profiles.map((profile) => (
                   <option key={profile.id} value={profile.id}>
-                    {profile.first_name || profile.last_name ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : profile.email}
+                    {profile.first_name || profile.last_name ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : profile.email} ({profile.email}) - {profile.role}
                   </option>
                 ))}
               </select>
@@ -161,7 +161,7 @@ export default function DepartmentsPage() {
               </div>
               <h3 className="text-lg font-semibold text-foreground">{dept.name}</h3>
               <p className="text-sm text-muted-foreground mt-2">
-                Manager: {dept.manager?.first_name || dept.manager?.last_name ? `${dept.manager?.first_name || ''} ${dept.manager?.last_name || ''}`.trim() : dept.manager?.email || 'Unassigned'}
+                Manager: {dept.manager?.first_name || dept.manager?.last_name ? `${dept.manager?.first_name || ''} ${dept.manager?.last_name || ''}`.trim() : dept.manager?.email || 'Unassigned'}{dept.manager?.email ? ` (${dept.manager.email})` : ''}{dept.manager?.role ? ` — ${dept.manager.role}` : ''}
               </p>
             </Card>
           ))}

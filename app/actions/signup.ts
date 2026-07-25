@@ -3,7 +3,7 @@
 import { getSupabase } from '@/lib/supabase'
 import { hashPassword } from '@/lib/auth'
 
-export async function signUpInvited(email: string, password: string) {
+export async function signUpInvited(email: string, password: string, firstName?: string, lastName?: string) {
   const supabase = getSupabase()
 
   const { data: existing } = await supabase
@@ -36,8 +36,8 @@ export async function signUpInvited(email: string, password: string) {
     .insert({
       id: newUser.id,
       email: email.toLowerCase().trim(),
-      first_name: null,
-      last_name: null,
+      first_name: firstName || null,
+      last_name: lastName || null,
       role: 'EMPLOYEE',
       team_id: null,
     })

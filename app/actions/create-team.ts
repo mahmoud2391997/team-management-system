@@ -3,7 +3,7 @@
 import { getSupabase } from '@/lib/supabase'
 import { getSessionFromCookies, hashPassword, comparePassword, setSessionCookie } from '@/lib/auth'
 
-export async function createTeamWithAccount(teamName: string, email: string, password: string) {
+export async function createTeamWithAccount(teamName: string, email: string, password: string, firstName?: string, lastName?: string) {
   if (!teamName.trim()) return { error: 'Team name is required' }
   if (!email.trim()) return { error: 'Email is required' }
   if (password.length < 6) return { error: 'Password must be at least 6 characters' }
@@ -54,8 +54,8 @@ export async function createTeamWithAccount(teamName: string, email: string, pas
     .upsert({
       id: userId,
       email: email.toLowerCase().trim(),
-      first_name: null,
-      last_name: null,
+      first_name: firstName || null,
+      last_name: lastName || null,
       role: 'ADMIN',
       team_id: teamId,
       updated_at: new Date().toISOString(),
@@ -97,11 +97,11 @@ export async function createTeamForUser(teamName: string) {
   }
   const teamId = teamResult.id
 
-  const { data: profile } = await supabase.from('profiles').select('email').eq('id', session.userId).single()
+  const { data: profile } = await supabase.from('profiles').select('email, first_name, last_name').eq('id', session.userId).single()
 
   await supabase
     .from('profiles')
-    .upsert({ id: session.userId, email: profile?.email || '', team_id: teamId, role: 'ADMIN', updated_at: new Date().toISOString() }, { onConflict: 'id' })
+    .upsert({ id: session.userId, email: profile?.email || '', first_name: profile?.first_name || null, last_name: profile?.last_name || null, team_id: teamId, role: 'ADMIN', updated_at: new Date().toISOString() }, { onConflict: 'id' })
 
   await supabase.from('team_members').upsert({
     user_id: session.userId,

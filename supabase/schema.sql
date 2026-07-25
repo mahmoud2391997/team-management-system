@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   status TEXT DEFAULT 'TODO',
   department_id TEXT,
   assignee_id TEXT,
+  created_by TEXT,
   due_date TIMESTAMPTZ,
   team_id TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT now(),

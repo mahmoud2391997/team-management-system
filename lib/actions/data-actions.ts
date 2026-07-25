@@ -234,7 +234,7 @@ export async function getDepartments(): Promise<ActionResult<Department[]>> {
 
     const enriched = await Promise.all(departments.map(async (dept) => {
       const { data: manager } = dept.manager_id
-        ? await supabase.from('profiles').select('id, email, first_name, last_name').eq('id', dept.manager_id).single()
+        ? await supabase.from('profiles').select('id, email, first_name, last_name, role').eq('id', dept.manager_id).single()
         : { data: null }
 
       return { ...dept, manager: manager || null }
@@ -282,7 +282,11 @@ export async function getTasks(filterDept?: string): Promise<ActionResult<Task[]
         ? await supabase.from('profiles').select('id, first_name, last_name, email').eq('id', task.assignee_id).single()
         : { data: null }
 
-      return { ...task, department: department || null, assignee: assignee || null }
+      const { data: creator } = task.created_by
+        ? await supabase.from('profiles').select('id, first_name, last_name, email').eq('id', task.created_by).single()
+        : { data: null }
+
+      return { ...task, department: department || null, assignee: assignee || null, creator: creator || null }
     }))
 
     return createSuccess(enriched as any as Task[])
@@ -394,13 +398,55 @@ export async function createEmployee(data: any): Promise<ActionResult<{ id: stri
     if (!auth.ok) return createError(auth.error!)
 
     const supabase = getSupabase()
+
+    const teamId = auth.profile?.team_id
+    if (!teamId) return createError('No team found')
+
+    const { data: existing } = await supabase
+      .from('employees')
+      .select('id')
+      .eq('team_id', teamId)
+      .eq('profile_id', data.profile_id)
+      .maybeSingle()
+
+    if (existing) return createError('This employee is already added to the team')
+
     const { data: result, error } = await supabase
       .from('employees')
-      .insert(data)
+      .insert({ ...data, team_id: teamId })
       .select('id')
       .single()
 
     if (error) return createError(error.message)
+
+    try {
+      const { data: assigneeProfile } = await supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', data.profile_id)
+        .single()
+
+      const { data: myProfile } = await supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', auth.profile.id)
+        .single()
+
+      const myName = myProfile ? `${myProfile.first_name || ''} ${myProfile.last_name || ''}`.trim() : 'Someone'
+
+      await supabase.from('notifications').insert({
+        user_id: data.profile_id,
+        type: 'employee_added',
+        title: 'Added to Team',
+        message: `${myName} added you as an employee`,
+        data: { added_by: auth.profile.id },
+        read: false,
+        team_id: teamId,
+      })
+    } catch (e) {
+      console.error('Notification insert failed:', e)
+    }
+
     return createSuccess({ id: result.id })
   } catch (error) {
     return createError(error instanceof Error ? error.message : 'Failed to create employee')
@@ -496,13 +542,42 @@ export async function createTask(data: any): Promise<ActionResult<{ id: string }
     if (!auth.ok) return createError(auth.error!)
 
     const supabase = getSupabase()
+
+    const teamId = auth.profile?.team_id
+    if (!teamId) return createError('No team found')
+
     const { data: result, error } = await supabase
       .from('tasks')
-      .insert(data)
+      .insert({ ...data, team_id: teamId, created_by: auth.profile.id })
       .select('id')
       .single()
 
     if (error) return createError(error.message)
+
+    if (data.assignee_id) {
+      try {
+        const { data: myProfile } = await supabase
+          .from('profiles')
+          .select('first_name, last_name')
+          .eq('id', auth.profile.id)
+          .single()
+
+        const myName = myProfile ? `${myProfile.first_name || ''} ${myProfile.last_name || ''}`.trim() : 'Someone'
+
+        await supabase.from('notifications').insert({
+          user_id: data.assignee_id,
+          type: 'task_assigned',
+          title: 'Task Assigned',
+          message: `${myName} assigned you a task: ${data.title}`,
+          data: { task_id: result.id, assigned_by: auth.profile.id },
+          read: false,
+          team_id: teamId,
+        })
+      } catch (e) {
+        console.error('Notification insert failed:', e)
+      }
+    }
+
     return createSuccess({ id: result.id })
   } catch (error) {
     return createError(error instanceof Error ? error.message : 'Failed to create task')
@@ -515,6 +590,43 @@ export async function updateTask(id: string, data: any): Promise<ActionResult<{ 
     if (!auth.ok) return createError(auth.error!)
 
     const supabase = getSupabase()
+
+    const teamId = auth.profile?.team_id
+
+    if (data.status) {
+      const { data: existingTask } = await supabase
+        .from('tasks')
+        .select('status, created_by, title')
+        .eq('id', id)
+        .single()
+
+      if (existingTask && existingTask.status !== data.status && existingTask.created_by && existingTask.created_by !== auth.profile.id) {
+        try {
+          const { data: myProfile } = await supabase
+            .from('profiles')
+            .select('first_name, last_name')
+            .eq('id', auth.profile.id)
+            .single()
+
+          const myName = myProfile ? `${myProfile.first_name || ''} ${myProfile.last_name || ''}`.trim() : 'Someone'
+
+          const statusLabels: Record<string, string> = { TODO: 'To Do', IN_PROGRESS: 'In Progress', REVIEW: 'Review', COMPLETED: 'Completed' }
+
+          await supabase.from('notifications').insert({
+            user_id: existingTask.created_by,
+            type: 'task_status_changed',
+            title: 'Task Status Updated',
+            message: `${myName} changed "${existingTask.title}" to ${statusLabels[data.status] || data.status}`,
+            data: { task_id: id, changed_by: auth.profile.id, new_status: data.status },
+            read: false,
+            team_id: teamId,
+          })
+        } catch (e) {
+          console.error('Notification insert failed:', e)
+        }
+      }
+    }
+
     const { error } = await supabase
       .from('tasks')
       .update({ ...data, updated_at: new Date().toISOString() })

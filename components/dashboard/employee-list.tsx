@@ -7,17 +7,20 @@ export default function EmployeeList({
   employees,
   onEdit,
   onDelete,
+  onView,
 }: {
   employees: any[]
   onEdit: (employee: any) => void
   onDelete: (id: string) => void
+  onView: (employee: any) => void
 }) {
   return (
     <div className="space-y-4">
       {employees.map((employee) => (
         <Card
           key={employee.id}
-          className="p-4 border border-border bg-card hover:bg-card/80 transition-colors"
+          className="p-4 border border-border bg-card hover:bg-card/80 transition-colors cursor-pointer"
+          onClick={() => onView(employee)}
         >
           <div className="flex items-center justify-between">
             <div className="flex-1">
@@ -73,7 +76,7 @@ export default function EmployeeList({
               </div>
             </div>
 
-            <div className="flex gap-2 ml-6">
+            <div className="flex gap-2 ml-6" onClick={(e) => e.stopPropagation()}>
               <Button
                 size="sm"
                 variant="outline"

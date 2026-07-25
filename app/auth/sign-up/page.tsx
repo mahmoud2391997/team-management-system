@@ -15,6 +15,8 @@ function SignUpForm() {
   const searchParams = useSearchParams()
   const emailParam = searchParams.get('email') || ''
   const [email, setEmail] = useState(emailParam)
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [password, setPassword] = useState('')
   const [repeatPassword, setRepeatPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -37,7 +39,7 @@ function SignUpForm() {
       return
     }
 
-    const result = await signUp(email.trim(), password)
+    const result = await signUp(email.trim(), password, firstName, lastName)
     if (result.error) {
       setError(result.error)
       setIsLoading(false)
@@ -82,6 +84,30 @@ function SignUpForm() {
                         />
                       </div>
                     )}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="firstName">First Name</Label>
+                        <Input
+                          id="firstName"
+                          type="text"
+                          placeholder="John"
+                          required
+                          value={firstName}
+                          onChange={(e) => setFirstName(e.target.value)}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="lastName">Last Name</Label>
+                        <Input
+                          id="lastName"
+                          type="text"
+                          placeholder="Doe"
+                          required
+                          value={lastName}
+                          onChange={(e) => setLastName(e.target.value)}
+                        />
+                      </div>
+                    </div>
                     <div className="grid gap-2">
                       <Label htmlFor="password">Password</Label>
                       <Input
