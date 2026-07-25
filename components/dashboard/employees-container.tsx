@@ -7,7 +7,6 @@ import { getEmployees, deleteEmployee } from '@/lib/actions/data-actions'
 import EmployeeForm from '@/components/dashboard/employee-form'
 import EmployeeList from '@/components/dashboard/employee-list'
 import DeleteModal from '@/components/ui/delete-modal'
-import EmployeeDetailModal from '@/components/ui/employee-detail-modal'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { Employee, Department } from '@/lib/types'
 
@@ -31,7 +30,6 @@ export default function EmployeesContainer({
   const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
-  const [viewTarget, setViewTarget] = useState<Employee | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
 
   const filteredEmployees = useMemo(() => {
@@ -90,10 +88,6 @@ export default function EmployeesContainer({
     }
   }
 
-  const handleView = (employee: Employee) => {
-    setViewTarget(employee)
-  }
-
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return
     setDeleting(true)
@@ -133,12 +127,6 @@ export default function EmployeesContainer({
         loading={deleting}
       />
 
-      <EmployeeDetailModal
-        open={!!viewTarget}
-        employee={viewTarget}
-        onClose={() => setViewTarget(null)}
-        onEdit={(emp) => { setViewTarget(null); handleEdit(emp) }}
-      />
       {deleteError && (
         <Card className="p-4 border border-destructive bg-destructive/10 text-sm text-destructive">
           {deleteError}
@@ -182,7 +170,6 @@ export default function EmployeesContainer({
             employees={paginatedEmployees}
             onEdit={handleEdit}
             onDelete={handleDeleteClick}
-            onView={handleView}
           />
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-6 pt-6 border-t border-border">

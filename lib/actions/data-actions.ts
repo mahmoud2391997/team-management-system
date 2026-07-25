@@ -260,12 +260,7 @@ export async function getTasks(filterDept?: string): Promise<ActionResult<Task[]
 
     if (!profile?.team_id) return createSuccess([])
 
-    const { data: depts } = await supabase.from('departments').select('id').eq('team_id', profile.team_id)
-    const deptIds = (depts || []).map(d => d.id)
-
-    if (deptIds.length === 0) return createSuccess([])
-
-    let query = supabase.from('tasks').select('*').in('department_id', deptIds)
+    let query = supabase.from('tasks').select('*').eq('team_id', profile.team_id)
     if (filterDept) query = query.eq('department_id', filterDept)
 
     const { data: tasks } = await query.order('created_at', { ascending: false })
@@ -402,49 +397,181 @@ export async function createEmployee(data: any): Promise<ActionResult<{ id: stri
     const teamId = auth.profile?.team_id
     if (!teamId) return createError('No team found')
 
+    let profileId = data.profile_id
+    const isManual = !!(data.manual_first_name && data.manual_email)
+
+    if (isManual) {
+      const emailLower = data.manual_email.trim().toLowerCase()
+
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', emailLower)
+        .maybeSingle()
+
+      if (existingProfile) {
+        const { data: alreadyEmployee } = await supabase
+          .from('employees')
+          .select('id')
+          .eq('team_id', teamId)
+          .eq('profile_id', existingProfile.id)
+          .maybeSingle()
+
+        if (alreadyEmployee) return createError('This person is already an employee in your team')
+
+        profileId = existingProfile.id
+      } else {
+        const newProfileId = crypto.randomUUID()
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            id: newProfileId,
+            email: emailLower,
+            first_name: data.manual_first_name,
+            last_name: data.manual_last_name || '',
+            role: data.manual_role || 'EMPLOYEE',
+            team_id: teamId,
+          })
+
+        if (profileError) return createError(profileError.message)
+        profileId = newProfileId
+      }
+    }
+
+    if (!profileId) return createError('Profile is required')
+
     const { data: existing } = await supabase
       .from('employees')
       .select('id')
       .eq('team_id', teamId)
-      .eq('profile_id', data.profile_id)
+      .eq('profile_id', profileId)
       .maybeSingle()
 
     if (existing) return createError('This employee is already added to the team')
 
     const { data: result, error } = await supabase
       .from('employees')
-      .insert({ ...data, team_id: teamId })
+      .insert({
+        profile_id: profileId,
+        department_id: data.department_id,
+        position: data.position,
+        join_date: data.join_date,
+        salary: data.salary,
+        status: data.status,
+        manager_id: data.manager_id,
+        team_id: teamId,
+      })
       .select('id')
       .single()
 
     if (error) return createError(error.message)
 
-    try {
-      const { data: assigneeProfile } = await supabase
-        .from('profiles')
-        .select('first_name, last_name')
-        .eq('id', data.profile_id)
-        .single()
+    if (!isManual) {
+      try {
+        const { data: myProfile } = await supabase
+          .from('profiles')
+          .select('first_name, last_name')
+          .eq('id', auth.profile.id)
+          .single()
 
-      const { data: myProfile } = await supabase
-        .from('profiles')
-        .select('first_name, last_name')
-        .eq('id', auth.profile.id)
-        .single()
+        const myName = myProfile ? `${myProfile.first_name || ''} ${myProfile.last_name || ''}`.trim() : 'Someone'
 
-      const myName = myProfile ? `${myProfile.first_name || ''} ${myProfile.last_name || ''}`.trim() : 'Someone'
+        await supabase.from('notifications').insert({
+          user_id: profileId,
+          type: 'employee_added',
+          title: 'Added to Team',
+          message: `${myName} added you as an employee`,
+          data: { added_by: auth.profile.id },
+          read: false,
+          team_id: teamId,
+        })
+      } catch (e) {
+        console.error('Notification insert failed:', e)
+      }
+    }
 
-      await supabase.from('notifications').insert({
-        user_id: data.profile_id,
-        type: 'employee_added',
-        title: 'Added to Team',
-        message: `${myName} added you as an employee`,
-        data: { added_by: auth.profile.id },
-        read: false,
-        team_id: teamId,
-      })
-    } catch (e) {
-      console.error('Notification insert failed:', e)
+    if (isManual) {
+      const emailLower = data.manual_email.trim().toLowerCase()
+
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', emailLower)
+        .maybeSingle()
+
+      const isRegistered = !!existingUser
+
+      const { data: existingInvite } = await supabase
+        .from('invitations')
+        .select('id')
+        .eq('email', emailLower)
+        .eq('team_id', teamId)
+        .is('accepted_at', null)
+        .maybeSingle()
+
+      if (!existingInvite) {
+        const { data: inviteResult } = await supabase
+          .from('invitations')
+          .insert({
+            team_id: teamId,
+            email: emailLower,
+            role: data.manual_role || 'EMPLOYEE',
+            invited_by: auth.profile.id,
+          })
+          .select('id')
+          .single()
+
+        const { data: team } = await supabase
+          .from('Team')
+          .select('name')
+          .eq('id', teamId)
+          .single()
+
+        const siteUrl = process.env.SITE_URL || 'http://localhost:3000'
+
+        try {
+          const { sendTeamInviteEmail, sendSignupInviteEmail } = await import('@/lib/email')
+
+          if (isRegistered) {
+            await sendTeamInviteEmail({
+              to: emailLower,
+              teamName: team?.name || 'a team',
+              role: data.manual_role || 'EMPLOYEE',
+              loginUrl: `${siteUrl}/auth/login`,
+            })
+
+            try {
+              await supabase.from('notifications').insert({
+                user_id: existingUser!.id,
+                type: 'team_invitation',
+                title: 'Team Invitation',
+                message: `You've been invited to join ${team?.name || 'a team'} as ${data.manual_role || 'EMPLOYEE'}`,
+                data: {
+                  invitation_id: inviteResult?.id,
+                  team_id: teamId,
+                  team_name: team?.name,
+                  role: data.manual_role || 'EMPLOYEE',
+                  invited_by: auth.profile.email,
+                },
+                read: false,
+                team_id: teamId,
+              })
+            } catch (e) {
+              console.error('Notification insert failed:', e)
+            }
+          } else {
+            await sendSignupInviteEmail({
+              to: emailLower,
+              teamName: team?.name || 'a team',
+              role: data.manual_role || 'EMPLOYEE',
+              signupUrl: `${siteUrl}/auth/sign-up`,
+              invitedBy: auth.profile.email || 'Someone',
+            })
+          }
+        } catch (e) {
+          console.error('Email send failed:', e)
+        }
+      }
     }
 
     return createSuccess({ id: result.id })
@@ -593,34 +720,49 @@ export async function updateTask(id: string, data: any): Promise<ActionResult<{ 
 
     const teamId = auth.profile?.team_id
 
-    if (data.status) {
-      const { data: existingTask } = await supabase
-        .from('tasks')
-        .select('status, created_by, title')
-        .eq('id', id)
+    const { data: existingTask } = await supabase
+      .from('tasks')
+      .select('status, created_by, assignee_id, title')
+      .eq('id', id)
+      .single()
+
+    if (existingTask) {
+      const { data: myProfile } = await supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', auth.profile.id)
         .single()
 
-      if (existingTask && existingTask.status !== data.status && existingTask.created_by && existingTask.created_by !== auth.profile.id) {
+      const myName = myProfile ? `${myProfile.first_name || ''} ${myProfile.last_name || ''}`.trim() : 'Someone'
+
+      const recipients = new Set<string>()
+      if (existingTask.created_by && existingTask.created_by !== auth.profile.id) recipients.add(existingTask.created_by)
+      if (existingTask.assignee_id && existingTask.assignee_id !== auth.profile.id) recipients.add(existingTask.assignee_id)
+
+      for (const recipientId of recipients) {
         try {
-          const { data: myProfile } = await supabase
-            .from('profiles')
-            .select('first_name, last_name')
-            .eq('id', auth.profile.id)
-            .single()
-
-          const myName = myProfile ? `${myProfile.first_name || ''} ${myProfile.last_name || ''}`.trim() : 'Someone'
-
-          const statusLabels: Record<string, string> = { TODO: 'To Do', IN_PROGRESS: 'In Progress', REVIEW: 'Review', COMPLETED: 'Completed' }
-
-          await supabase.from('notifications').insert({
-            user_id: existingTask.created_by,
-            type: 'task_status_changed',
-            title: 'Task Status Updated',
-            message: `${myName} changed "${existingTask.title}" to ${statusLabels[data.status] || data.status}`,
-            data: { task_id: id, changed_by: auth.profile.id, new_status: data.status },
-            read: false,
-            team_id: teamId,
-          })
+          if (data.status && existingTask.status !== data.status) {
+            const statusLabels: Record<string, string> = { TODO: 'To Do', IN_PROGRESS: 'In Progress', REVIEW: 'Review', COMPLETED: 'Completed' }
+            await supabase.from('notifications').insert({
+              user_id: recipientId,
+              type: 'task_status_changed',
+              title: 'Task Status Updated',
+              message: `${myName} changed "${existingTask.title}" to ${statusLabels[data.status] || data.status}`,
+              data: { task_id: id, changed_by: auth.profile.id, new_status: data.status },
+              read: false,
+              team_id: teamId,
+            })
+          } else {
+            await supabase.from('notifications').insert({
+              user_id: recipientId,
+              type: 'task_updated',
+              title: 'Task Updated',
+              message: `${myName} updated the task "${existingTask.title}"`,
+              data: { task_id: id, changed_by: auth.profile.id },
+              read: false,
+              team_id: teamId,
+            })
+          }
         } catch (e) {
           console.error('Notification insert failed:', e)
         }
@@ -645,11 +787,139 @@ export async function deleteTask(id: string): Promise<ActionResult<{ id: string 
     if (!auth.ok) return createError(auth.error!)
 
     const supabase = getSupabase()
+
+    const teamId = auth.profile?.team_id
+
+    const { data: existingTask } = await supabase
+      .from('tasks')
+      .select('title, created_by, assignee_id')
+      .eq('id', id)
+      .single()
+
+    if (existingTask) {
+      const { data: myProfile } = await supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', auth.profile.id)
+        .single()
+
+      const myName = myProfile ? `${myProfile.first_name || ''} ${myProfile.last_name || ''}`.trim() : 'Someone'
+
+      const recipients = new Set<string>()
+      if (existingTask.created_by && existingTask.created_by !== auth.profile.id) recipients.add(existingTask.created_by)
+      if (existingTask.assignee_id && existingTask.assignee_id !== auth.profile.id) recipients.add(existingTask.assignee_id)
+
+      for (const recipientId of recipients) {
+        try {
+          await supabase.from('notifications').insert({
+            user_id: recipientId,
+            type: 'task_deleted',
+            title: 'Task Deleted',
+            message: `${myName} deleted the task "${existingTask.title}"`,
+            data: { task_id: id, deleted_by: auth.profile.id },
+            read: false,
+            team_id: teamId,
+          })
+        } catch (e) {
+          console.error('Notification insert failed:', e)
+        }
+      }
+    }
+
     const { error } = await supabase.from('tasks').delete().eq('id', id)
     if (error) return createError(error.message)
     return createSuccess({ id })
   } catch (error) {
     return createError(error instanceof Error ? error.message : 'Failed to delete task')
+  }
+}
+
+export async function getEmployeeById(employeeId: string) {
+  try {
+    const session = await getSessionFromCookies()
+    if (!session) return createError('Not authenticated')
+
+    const supabase = getSupabase()
+
+    const { data: employee, error: empError } = await supabase
+      .from('employees')
+      .select('*')
+      .eq('id', employeeId)
+      .single()
+
+    if (empError || !employee) return createError('Employee not found')
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, email, role')
+      .eq('id', employee.profile_id)
+      .single()
+
+    const { data: department } = employee.department_id
+      ? await supabase.from('departments').select('id, name').eq('id', employee.department_id).single()
+      : { data: null }
+
+    const { data: manager } = employee.manager_id
+      ? await supabase.from('profiles').select('id, first_name, last_name, email').eq('id', employee.manager_id).single()
+      : { data: null }
+
+    return createSuccess({
+      ...employee,
+      profile: profile || null,
+      department: department || null,
+      manager: manager || null,
+    })
+  } catch (error) {
+    return createError(error instanceof Error ? error.message : 'Failed to fetch employee')
+  }
+}
+
+export async function getTasksByAssignee(assigneeId: string) {
+  try {
+    const session = await getSessionFromCookies()
+    if (!session) return createSuccess([])
+
+    const supabase = getSupabase()
+
+    let profileId = assigneeId
+
+    const { data: employee } = await supabase
+      .from('employees')
+      .select('profile_id')
+      .eq('id', assigneeId)
+      .single()
+
+    if (employee?.profile_id) {
+      profileId = employee.profile_id
+    }
+
+    const { data: tasks, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('assignee_id', profileId)
+      .order('created_at', { ascending: false })
+
+    if (error || !tasks || tasks.length === 0) return createSuccess([])
+
+    const enriched = await Promise.all(tasks.map(async (task) => {
+      const { data: department } = task.department_id
+        ? await supabase.from('departments').select('id, name').eq('id', task.department_id).single()
+        : { data: null }
+
+      const { data: assignee } = task.assignee_id
+        ? await supabase.from('profiles').select('id, first_name, last_name, email').eq('id', task.assignee_id).single()
+        : { data: null }
+
+      const { data: creator } = task.created_by
+        ? await supabase.from('profiles').select('id, first_name, last_name, email').eq('id', task.created_by).single()
+        : { data: null }
+
+      return { ...task, department: department || null, assignee: assignee || null, creator: creator || null }
+    }))
+
+    return createSuccess(enriched as any)
+  } catch (error) {
+    return createError(error instanceof Error ? error.message : 'Failed to fetch tasks')
   }
 }
 

@@ -66,6 +66,7 @@ export interface Task {
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
   department_id: string
   assignee_id?: string
+  created_by?: string
   due_date?: Date
   team_id: string
   created_at: Date
@@ -76,6 +77,12 @@ export interface Task {
     name: string
   }
   assignee?: {
+    id: string
+    first_name: string
+    last_name: string
+    email: string
+  }
+  creator?: {
     id: string
     first_name: string
     last_name: string

@@ -19,6 +19,7 @@ export default function EmployeeForm({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [profiles, setProfiles] = useState<any[]>([])
+  const [entryMode, setEntryMode] = useState<'profile' | 'manual'>('profile')
   const [formData, setFormData] = useState({
     profile_id: employee?.profile_id || '',
     department_id: employee?.department_id || '',
@@ -27,6 +28,10 @@ export default function EmployeeForm({
     salary: employee?.salary || '',
     status: employee?.status || 'ACTIVE',
     manager_id: employee?.manager_id || '',
+    manual_first_name: '',
+    manual_last_name: '',
+    manual_email: '',
+    manual_role: 'EMPLOYEE',
   })
 
   useEffect(() => {
@@ -55,15 +60,25 @@ export default function EmployeeForm({
           manager_id: formData.manager_id || null,
         })
       } else {
-        result = await createEmployee({
-          profile_id: formData.profile_id,
+        const payload: any = {
           department_id: formData.department_id,
           position: formData.position,
           join_date: formData.join_date ? new Date(formData.join_date) : null,
           salary: formData.salary ? parseFloat(formData.salary) : null,
           status: formData.status,
           manager_id: formData.manager_id || null,
-        })
+        }
+
+        if (entryMode === 'profile') {
+          payload.profile_id = formData.profile_id
+        } else {
+          payload.manual_first_name = formData.manual_first_name
+          payload.manual_last_name = formData.manual_last_name
+          payload.manual_email = formData.manual_email
+          payload.manual_role = formData.manual_role
+        }
+
+        result = await createEmployee(payload)
       }
 
       if (result.error) {
@@ -88,6 +103,34 @@ export default function EmployeeForm({
       <form onSubmit={handleSubmit} className="space-y-4">
         {!employee && (
           <div>
+            <label className="block text-sm font-medium text-foreground mb-2">Entry Method</label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="entryMode"
+                  checked={entryMode === 'profile'}
+                  onChange={() => setEntryMode('profile')}
+                  className="accent-primary"
+                />
+                <span className="text-sm text-foreground">Select Existing Profile</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="entryMode"
+                  checked={entryMode === 'manual'}
+                  onChange={() => setEntryMode('manual')}
+                  className="accent-primary"
+                />
+                <span className="text-sm text-foreground">Enter Manually</span>
+              </label>
+            </div>
+          </div>
+        )}
+
+        {!employee && entryMode === 'profile' && (
+          <div>
             <label className="block text-sm font-medium text-foreground mb-2">Select Profile</label>
             <select
               required
@@ -97,13 +140,64 @@ export default function EmployeeForm({
             >
               <option value="">Choose a user...</option>
               {profiles
-                .filter((p) => employee ? p.id === employee.profile_id : !existingProfileIds.includes(p.id))
+                .filter((p) => !existingProfileIds.includes(p.id))
                 .map((profile) => (
                 <option key={profile.id} value={profile.id}>
                   {profile.first_name || profile.last_name ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : profile.email} ({profile.email}) - {profile.role}
                 </option>
               ))}
             </select>
+          </div>
+        )}
+
+        {!employee && entryMode === 'manual' && (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">First Name *</label>
+              <input
+                type="text"
+                required
+                value={formData.manual_first_name}
+                onChange={(e) => setFormData({ ...formData, manual_first_name: e.target.value })}
+                placeholder="John"
+                className="w-full px-4 py-2 border border-border rounded-lg bg-background text-foreground"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">Last Name *</label>
+              <input
+                type="text"
+                required
+                value={formData.manual_last_name}
+                onChange={(e) => setFormData({ ...formData, manual_last_name: e.target.value })}
+                placeholder="Doe"
+                className="w-full px-4 py-2 border border-border rounded-lg bg-background text-foreground"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">Email *</label>
+              <input
+                type="email"
+                required
+                value={formData.manual_email}
+                onChange={(e) => setFormData({ ...formData, manual_email: e.target.value })}
+                placeholder="john@example.com"
+                className="w-full px-4 py-2 border border-border rounded-lg bg-background text-foreground"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">Role *</label>
+              <select
+                required
+                value={formData.manual_role}
+                onChange={(e) => setFormData({ ...formData, manual_role: e.target.value })}
+                className="w-full px-4 py-2 border border-border rounded-lg bg-background text-foreground"
+              >
+                <option value="EMPLOYEE">Employee</option>
+                <option value="MANAGER">Manager</option>
+                <option value="ADMIN">Admin</option>
+              </select>
+            </div>
           </div>
         )}
 

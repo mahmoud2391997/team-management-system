@@ -20,15 +20,18 @@ const statusColumns = [
 interface TasksContainerProps {
   initialTasks: Task[]
   initialDepartments: Department[]
+  currentUserId: string
 }
 
 export default function TasksContainer({
   initialTasks,
   initialDepartments,
+  currentUserId,
 }: TasksContainerProps) {
   const [tasks, setTasks] = useState(initialTasks)
   const [departments] = useState(initialDepartments)
   const [filterDept, setFilterDept] = useState('')
+  const [filterAssignee, setFilterAssignee] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [draggedId, setDraggedId] = useState<string | null>(null)
@@ -42,7 +45,12 @@ export default function TasksContainer({
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
 
-  const filteredTasks = tasks.filter(task => !filterDept || task.department_id === filterDept)
+  const filteredTasks = tasks.filter(task => {
+    if (filterDept && task.department_id !== filterDept) return false
+    if (filterAssignee === 'me' && task.assignee_id !== currentUserId) return false
+    if (filterAssignee === 'by_me' && task.created_by !== currentUserId) return false
+    return true
+  })
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -147,18 +155,29 @@ export default function TasksContainer({
       ) : (
         <>
           <div className="flex gap-4 items-center justify-between">
-            <select
-              value={filterDept}
-              onChange={(e) => setFilterDept(e.target.value)}
-              className="px-4 py-2 border border-border rounded-lg bg-background text-foreground"
-            >
-              <option value="">All Departments</option>
-              {departments.map((dept) => (
-                <option key={dept.id} value={dept.id}>
-                  {dept.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-4 items-center">
+              <select
+                value={filterDept}
+                onChange={(e) => setFilterDept(e.target.value)}
+                className="px-4 py-2 border border-border rounded-lg bg-background text-foreground"
+              >
+                <option value="">All Departments</option>
+                {departments.map((dept) => (
+                  <option key={dept.id} value={dept.id}>
+                    {dept.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={filterAssignee}
+                onChange={(e) => setFilterAssignee(e.target.value)}
+                className="px-4 py-2 border border-border rounded-lg bg-background text-foreground"
+              >
+                <option value="">All Tasks</option>
+                <option value="me">Assigned to Me</option>
+                <option value="by_me">Assigned by Me</option>
+              </select>
+            </div>
             {canCreate && <Button onClick={() => { setEditingTask(null); setShowForm(true) }}>+ Add Task</Button>}
           </div>
 

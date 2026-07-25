@@ -1,40 +1,53 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { use, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { getEmployees, getTasks } from '@/lib/actions/data-actions'
+import { getEmployeeById, getTasksByAssignee, updateTask, deleteTask, getDepartments } from '@/lib/actions/data-actions'
 import { isError } from '@/lib/utils/async-helpers'
-import { ArrowLeft, Shield, Calendar, DollarSign, Briefcase, User, CheckCircle } from 'lucide-react'
+import TaskDetailModal from '@/components/ui/task-detail-modal'
+import { usePermissions } from '@/components/dashboard/permissions-context'
+import TaskForm from '@/components/dashboard/task-form'
+import { ArrowLeft, Shield, Calendar, DollarSign, Briefcase, CheckCircle } from 'lucide-react'
 
-export default function EmployeeDetailPage({ params }: { params: { id: string } }) {
+export default function EmployeeDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const router = useRouter()
   const [employee, setEmployee] = useState<any>(null)
   const [tasks, setTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [viewTask, setViewTask] = useState<any>(null)
+  const [showForm, setShowForm] = useState(false)
+  const [editingTask, setEditingTask] = useState<any>(null)
+  const [taskDepartments, setTaskDepartments] = useState<any[]>([])
+  const { permissions } = usePermissions()
+  const canEdit = permissions.includes('tasks.edit')
+  const canDelete = permissions.includes('tasks.delete')
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [empResult, tasksResult] = await Promise.all([
-          getEmployees(),
-          getTasks(),
+        const [empResult, tasksResult, deptResult] = await Promise.all([
+          getEmployeeById(id),
+          getTasksByAssignee(id),
+          getDepartments(),
         ])
 
         if (!isError(empResult)) {
-          const found = empResult.data.find((e: any) => e.id === params.id)
-          if (found) {
-            setEmployee(found)
-          } else {
-            router.push('/employees')
-          }
+          setEmployee(empResult.data)
+        } else {
+          router.push('/employees')
+          return
         }
 
         if (!isError(tasksResult)) {
-          const employeeTasks = tasksResult.data.filter((t: any) => t.assignee_id === params.id)
-          setTasks(employeeTasks)
+          setTasks(tasksResult.data)
+        }
+
+        if (!isError(deptResult)) {
+          setTaskDepartments(deptResult.data)
         }
       } finally {
         setLoading(false)
@@ -42,7 +55,7 @@ export default function EmployeeDetailPage({ params }: { params: { id: string } 
     }
 
     fetchData()
-  }, [params.id, router])
+  }, [id, router])
 
   if (loading) {
     return (
@@ -77,8 +90,41 @@ export default function EmployeeDetailPage({ params }: { params: { id: string } 
   const completedTasks = tasks.filter(t => t.status === 'COMPLETED').length
   const assignedTasks = tasks.length
 
+  const refreshTasks = async () => {
+    const result = await getTasksByAssignee(id)
+    if (!isError(result)) setTasks(result.data)
+  }
+
+  const handleDeleteTask = async (taskId: string) => {
+    setViewTask(null)
+    await deleteTask(taskId)
+    await refreshTasks()
+  }
+
   return (
     <div className="p-8 space-y-8">
+      {showForm && (
+        <TaskForm
+          task={editingTask}
+          departments={taskDepartments}
+          onClose={async () => {
+            setShowForm(false)
+            setEditingTask(null)
+            await refreshTasks()
+          }}
+        />
+      )}
+
+      <TaskDetailModal
+        open={!!viewTask}
+        task={viewTask}
+        onClose={() => setViewTask(null)}
+        onEdit={(t) => { setViewTask(null); setEditingTask(t); setShowForm(true) }}
+        onDelete={handleDeleteTask}
+        canEdit={canEdit}
+        canDelete={canDelete}
+      />
+
       <Link href="/employees">
         <Button variant="outline">
           <ArrowLeft className="h-4 w-4 mr-2" />
@@ -197,7 +243,7 @@ export default function EmployeeDetailPage({ params }: { params: { id: string } 
               ) : (
                 <div className="space-y-3">
                   {tasks.map((task) => (
-                    <div key={task.id} className="p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors">
+                    <div key={task.id} onClick={() => setViewTask(task)} className="p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
                           <h4 className="font-semibold text-foreground">{task.title}</h4>

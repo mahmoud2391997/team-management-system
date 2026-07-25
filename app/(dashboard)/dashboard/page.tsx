@@ -3,7 +3,7 @@ import { Card } from '@/components/ui/card'
 import { isError } from '@/lib/utils/async-helpers'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { TrendingUp, CheckCircle, AlertCircle } from 'lucide-react'
+import TaskStatusChart from '@/components/dashboard/task-status-chart'
 
 export const metadata = {
   title: 'Dashboard | Team Management',
@@ -68,59 +68,16 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* Task Status Overview */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="p-6 border border-border bg-card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-foreground">To Do</h3>
-            <AlertCircle className="h-5 w-5 text-yellow-600" />
-          </div>
-          <div className="text-4xl font-bold text-foreground mb-2">{todoTasks}</div>
-          <div className="w-full bg-muted rounded-full h-2">
-            <div
-              className="bg-yellow-600 h-2 rounded-full"
-              style={{ width: stats.tasks > 0 ? `${(todoTasks / stats.tasks) * 100}%` : '0%' }}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            {stats.tasks > 0 ? Math.round((todoTasks / stats.tasks) * 100) : 0}% of total tasks
-          </p>
-        </Card>
-
-        <Card className="p-6 border border-border bg-card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-foreground">In Progress</h3>
-            <TrendingUp className="h-5 w-5 text-blue-600" />
-          </div>
-          <div className="text-4xl font-bold text-foreground mb-2">{inProgressTasks}</div>
-          <div className="w-full bg-muted rounded-full h-2">
-            <div
-              className="bg-blue-600 h-2 rounded-full"
-              style={{ width: stats.tasks > 0 ? `${(inProgressTasks / stats.tasks) * 100}%` : '0%' }}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            {stats.tasks > 0 ? Math.round((inProgressTasks / stats.tasks) * 100) : 0}% of total tasks
-          </p>
-        </Card>
-
-        <Card className="p-6 border border-border bg-card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-foreground">Completed</h3>
-            <CheckCircle className="h-5 w-5 text-green-600" />
-          </div>
-          <div className="text-4xl font-bold text-foreground mb-2">{stats.completedTasks}</div>
-          <div className="w-full bg-muted rounded-full h-2">
-            <div
-              className="bg-green-600 h-2 rounded-full"
-              style={{ width: stats.tasks > 0 ? `${(stats.completedTasks / stats.tasks) * 100}%` : '0%' }}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            {stats.tasks > 0 ? Math.round((stats.completedTasks / stats.tasks) * 100) : 0}% of total tasks
-          </p>
-        </Card>
-      </div>
+      {/* Task Status Chart */}
+      <Card className="p-6 border border-border bg-card">
+        <h3 className="text-lg font-semibold text-foreground mb-4">Task Status Overview</h3>
+        <TaskStatusChart
+          todo={todoTasks}
+          inProgress={inProgressTasks}
+          review={reviewTasks}
+          completed={stats.completedTasks}
+        />
+      </Card>
 
       {/* Recent Tasks */}
       <Card className="p-6 border border-border bg-card">

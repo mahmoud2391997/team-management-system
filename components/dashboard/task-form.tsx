@@ -75,7 +75,7 @@ export default function TaskForm({
       status: formData.status,
       department_id: formData.department_id || null,
       assignee_id: formData.assignee_id || null,
-      due_date: formData.due_date ? new Date(formData.due_date) : null,
+      due_date: formData.due_date ? new Date(formData.due_date).toISOString() : null,
     }
 
     const result = isEditing
