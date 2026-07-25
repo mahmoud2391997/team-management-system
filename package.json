@@ -53,10 +53,5 @@
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
-  },
-  "pnpm": {
-    "overrides": {
-      "hono": "4.12.25"
-    }
   }
 }
