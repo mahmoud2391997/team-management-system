@@ -74,6 +74,7 @@ Required variables:
 | `SMTP_EMAIL` | Gmail address for sending emails |
 | `SMTP_PASSWORD` | Gmail app password |
 | `SITE_URL` | Your app URL (e.g., `http://localhost:3000`) |
+| `DEMO_MODE` | (Optional) Set to `1` to run with seeded dummy data and no login. Auto-activates when credentials are missing or the database is unreachable |
 
 ### 4. Set up the database
 Run the SQL schema in your Supabase SQL Editor:

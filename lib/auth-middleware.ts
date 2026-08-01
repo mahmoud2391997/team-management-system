@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { ensureDemoMode, DEMO_LOGOUT_COOKIE } from '@/lib/demo/mode'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'team-management-secret-key-change-in-production'
 
@@ -43,6 +44,7 @@ function verifyTokenEdge(token: string): { userId: string; email: string } | nul
 }
 
 export async function updateSession(request: NextRequest) {
+  const demoMode = await ensureDemoMode()
   const token = request.cookies.get('auth-token')?.value
   const noCacheHeaders = {
     'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0, private',
@@ -50,6 +52,28 @@ export async function updateSession(request: NextRequest) {
     'Expires': '0',
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
+  }
+
+  // Demo mode: no sign-in needed. Allow protected routes and skip auth pages.
+  if (demoMode) {
+    const demoLoggedOut = !!request.cookies.get(DEMO_LOGOUT_COOKIE)?.value
+    const isAuthPath = request.nextUrl.pathname === '/auth' || request.nextUrl.pathname.startsWith('/auth/')
+
+    if (!demoLoggedOut && isAuthPath) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/dashboard'
+      return NextResponse.redirect(url)
+    }
+
+    if (demoLoggedOut && isProtectedRoute(request.nextUrl.pathname)) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/auth/login'
+      return NextResponse.redirect(url)
+    }
+
+    const response = NextResponse.next()
+    Object.entries(noCacheHeaders).forEach(([key, value]) => response.headers.set(key, value))
+    return response
   }
 
   if (!token) {

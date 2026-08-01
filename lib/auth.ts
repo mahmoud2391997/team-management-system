@@ -2,6 +2,8 @@ import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import { cookies } from 'next/headers'
 import { getSupabase } from '@/lib/supabase'
+import { ensureDemoMode, DEMO_LOGOUT_COOKIE } from '@/lib/demo/mode'
+import { DEMO_USER } from '@/lib/demo/store'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'team-management-secret-key-change-in-production'
 const COOKIE_NAME = 'auth-token'
@@ -58,15 +60,31 @@ export async function setSessionCookie(payload: JWTPayload) {
     path: '/',
     maxAge: 60 * 60 * 24 * 7,
   })
+  cookieStore.delete(DEMO_LOGOUT_COOKIE)
 }
 
 export async function removeSessionCookie() {
   const cookieStore = await cookies()
   cookieStore.delete(COOKIE_NAME)
+  if (await ensureDemoMode()) {
+    cookieStore.set(DEMO_LOGOUT_COOKIE, '1', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7,
+    })
+  }
 }
 
 export async function getSessionFromCookies(): Promise<JWTPayload | null> {
   const cookieStore = await cookies()
+  const demoLoggedOut = !!cookieStore.get(DEMO_LOGOUT_COOKIE)?.value
+
+  if ((await ensureDemoMode()) && !demoLoggedOut) {
+    return { userId: DEMO_USER.id, email: DEMO_USER.email }
+  }
+
   const token = cookieStore.get(COOKIE_NAME)?.value
   if (!token) return null
   return verifyToken(token)

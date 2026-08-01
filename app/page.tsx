@@ -1,4 +1,5 @@
 import { getCurrentUser } from '@/lib/auth'
+import { ensureDemoMode } from '@/lib/demo/mode'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -7,6 +8,7 @@ import DemoButton from '@/components/demo-button'
 
 export default async function HomePage() {
   const user = await getCurrentUser()
+  const demoMode = await ensureDemoMode()
 
   if (user?.profile?.team_id) {
     redirect('/dashboard')
@@ -25,24 +27,28 @@ export default async function HomePage() {
         </div>
         <div className="flex items-center gap-3">
           <DemoButton />
-          <Link
-            href="/auth/login"
-            className="inline-flex h-9 items-center justify-center rounded-md px-4 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Login
-          </Link>
-          <Link
-            href="/auth/sign-up"
-            className="inline-flex h-9 items-center justify-center rounded-md border px-4 text-sm font-medium hover:bg-accent transition-colors"
-          >
-            Sign Up
-          </Link>
-          <Link
-            href="/auth/create-team"
-            className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-          >
-            Create a Team
-          </Link>
+          {!demoMode && (
+            <>
+              <Link
+                href="/auth/login"
+                className="inline-flex h-9 items-center justify-center rounded-md px-4 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Login
+              </Link>
+              <Link
+                href="/auth/sign-up"
+                className="inline-flex h-9 items-center justify-center rounded-md border px-4 text-sm font-medium hover:bg-accent transition-colors"
+              >
+                Sign Up
+              </Link>
+              <Link
+                href="/auth/create-team"
+                className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                Create a Team
+              </Link>
+            </>
+          )}
         </div>
       </header>
 
@@ -59,28 +65,42 @@ export default async function HomePage() {
         <p className="mt-4 max-w-xl text-base text-muted-foreground">
           Organize departments, track employees, assign tasks, and monitor progress — all from a single dashboard.
         </p>
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-          <Link
-            href="/auth/create-team"
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-6 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-          >
-            Create a Team
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-          <Link
-            href="/auth/sign-up"
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background px-6 text-sm font-medium hover:bg-accent transition-colors"
-          >
-            Sign Up
-          </Link>
-          <Link
-            href="/auth/login"
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background px-6 text-sm font-medium hover:bg-accent transition-colors"
-          >
-            Login
-          </Link>
-          <DemoButton className="h-10 rounded-lg" />
-        </div>
+        {demoMode ? (
+          <div className="mt-10 flex flex-col items-center gap-4">
+            <DemoButton hero />
+            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              No signup needed — explore the full app instantly
+            </p>
+          </div>
+        ) : (
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <Link
+              href="/auth/create-team"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-6 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              Create a Team
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link
+              href="/auth/sign-up"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background px-6 text-sm font-medium hover:bg-accent transition-colors"
+            >
+              Sign Up
+            </Link>
+            <Link
+              href="/auth/login"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background px-6 text-sm font-medium hover:bg-accent transition-colors"
+            >
+              Login
+            </Link>
+          </div>
+        )}
+        {!demoMode && (
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <DemoButton className="h-10 rounded-lg" />
+          </div>
+        )}
       </section>
 
       <section className="shrink-0 border-t bg-muted/30 px-6 py-8 lg:px-12">
